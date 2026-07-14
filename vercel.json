@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/process-campaigns",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/check-replies",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/reset-smtp-limits",
