@@ -54,12 +54,17 @@ npm run dev
    - Optional: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL`
      (these can also be saved securely from Settings)
 
-The `vercel.json` cron schedules are already configured:
-- **Every minute**: drains the sending queue (`/api/cron/process-campaigns`)
-- **Every 5 minutes**: polls inboxes for replies (`/api/cron/check-replies`)
-- **Daily at midnight**: resets SMTP daily counters (`/api/cron/reset-smtp-limits`)
+The checked-in `vercel.json` uses Hobby-compatible once-daily schedules so a
+new deployment works without a paid plan:
+- **00:00 UTC daily**: drains the sending queue (`/api/cron/process-campaigns`)
+- **00:15 UTC daily**: polls inboxes for replies (`/api/cron/check-replies`)
+- **01:00 UTC daily**: resets SMTP daily counters (`/api/cron/reset-smtp-limits`)
 
-> **Throughput note:** Vercel **Hobby** (free) limits cron to once/day and 60s function timeouts — fine for testing. For the 3,000-email batches the spec mentions, upgrade to **Vercel Pro** ($20/mo) for per-minute cron + 300s timeouts. The code is identical either way.
+> **Throughput note:** Vercel **Hobby** limits each cron to once/day and does not
+> guarantee minute-level precision. For active outreach, upgrade to **Vercel
+> Pro**, then change `process-campaigns` to `* * * * *` and `check-replies` to
+> `*/5 * * * *`. You may also invoke the protected cron endpoints from another
+> scheduler using the `Authorization: Bearer <CRON_SECRET>` header.
 
 ---
 
