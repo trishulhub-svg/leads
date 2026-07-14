@@ -15,7 +15,7 @@ export type LeadSource = (typeof LEAD_SOURCES)[number];
 export const LEAD_STATUS = ["raw", "blacklisted"] as const;
 export type LeadStatus = (typeof LEAD_STATUS)[number];
 
-export const SENT_STATUS = ["queued", "sent", "failed", "bounced"] as const;
+export const SENT_STATUS = ["queued", "processing", "sent", "failed", "bounced"] as const;
 export type SentStatus = (typeof SENT_STATUS)[number];
 
 export const CAMPAIGN_STATUS = ["draft", "sending", "done", "paused"] as const;

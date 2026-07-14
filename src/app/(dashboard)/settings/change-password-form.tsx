@@ -13,20 +13,36 @@ export function ChangePasswordForm() {
     e.preventDefault();
     setState({ loading: true });
     const fd = new FormData(e.currentTarget);
-    const res = await fetch("/api/account/password", {
-      method: "POST",
-      body: JSON.stringify({
-        current: fd.get("current"),
-        next: fd.get("next"),
-        confirm: fd.get("confirm"),
-      }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const data = await res.json();
-    if (!res.ok) setState({ loading: false, error: data.error });
-    else {
-      setState({ loading: false, ok: true });
-      (e.target as HTMLFormElement).reset();
+    const current = String(fd.get("current") || "");
+    const next = String(fd.get("next") || "");
+    const confirm = String(fd.get("confirm") || "");
+
+    if (next !== confirm) {
+      setState({ loading: false, error: "Passwords do not match." });
+      return;
+    }
+    if (next.length < 8) {
+      setState({ loading: false, error: "Password must be at least 8 characters." });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current, next, confirm }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setState({ loading: false, error: data.error || "Failed to update password." });
+      } else {
+        setState({ loading: false, ok: true });
+        (e.target as HTMLFormElement).reset();
+        // The server invalidates all sessions on password change — redirect to login.
+        setTimeout(() => { window.location.href = "/login"; }, 1500);
+      }
+    } catch {
+      setState({ loading: false, error: "Network error. Please try again." });
     }
   }
 
@@ -45,7 +61,7 @@ export function ChangePasswordForm() {
         <Input id="confirm" name="confirm" type="password" required minLength={8} />
       </div>
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
-      {state.ok && <p className="text-sm text-emerald-600 dark:text-emerald-400">Password changed. Please sign in again.</p>}
+      {state.ok && <p className="text-sm text-emerald-600 dark:text-emerald-400">Password changed. Redirecting to login…</p>}
       <Button type="submit" disabled={state.loading} size="sm">
         {state.loading && <Loader2 className="h-4 w-4 animate-spin" />}
         Update password

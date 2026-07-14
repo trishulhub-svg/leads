@@ -251,7 +251,7 @@ export async function verifyForgotOtp(
   otp: string
 ): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
   const rl = await checkRateLimit(`otp_verify:${email.toLowerCase()}`, { max: 5, windowMs: 15 * 60 * 1000 });
-  if (!rl.allowed) return { ok: false, error: "Too many attempts. Try again later." };
+  if (!rl.allowed && !rl.dbError) return { ok: false, error: "Too many attempts. Try again later." };
 
   const key = `forgot_otp_${email.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
   const row = await db.select().from(schema.settings).where(eq(schema.settings.key, key)).limit(1).then((r) => r[0]);

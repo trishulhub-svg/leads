@@ -125,17 +125,9 @@ async function checkOneInbox(cfg: typeof schema.smtpConfigs.$inferSelect): Promi
           }
           result.matched++;
 
-          // Mark the sent_email as replied.
-          if (!sentRow.repliedAt) {
-            await db
-              .update(schema.sentEmails)
-              .set({ repliedAt: new Date(), status: "sent" })
-              .where(eq(schema.sentEmails.id, sentRow.id));
-          }
-
           switch (classification) {
             case "bounce": {
-              // Bad lead — blacklist + mark bounced.
+              // Bounce is NOT a reply — don't set repliedAt.
               await db
                 .update(schema.leads)
                 .set({ status: "blacklisted" })
@@ -147,13 +139,25 @@ async function checkOneInbox(cfg: typeof schema.smtpConfigs.$inferSelect): Promi
               break;
             }
             case "negative": {
-              // Move to Wasted in the CRM (or create if missing).
+              // Genuine reply — set repliedAt, then move to Wasted.
+              if (!sentRow.repliedAt) {
+                await db
+                  .update(schema.sentEmails)
+                  .set({ repliedAt: new Date() })
+                  .where(eq(schema.sentEmails.id, sentRow.id));
+              }
               await upsertCrm(leadId, sentRow.id, "wasted");
               result.promoted++;
               break;
             }
             case "positive": {
-              // Promote into the CRM at the first stage.
+              // Genuine reply — set repliedAt, then promote into the CRM.
+              if (!sentRow.repliedAt) {
+                await db
+                  .update(schema.sentEmails)
+                  .set({ repliedAt: new Date() })
+                  .where(eq(schema.sentEmails.id, sentRow.id));
+              }
               await upsertCrm(leadId, sentRow.id, "contacted");
               result.promoted++;
               break;
@@ -169,8 +173,9 @@ async function checkOneInbox(cfg: typeof schema.smtpConfigs.$inferSelect): Promi
         }
       }
 
-      // Advance the UID cursor to the latest we saw (or uidNext - 1).
-      const newCursor = status?.uidNext ? Number(status.uidNext) - 1 : Math.max(cfg.lastCheckedUid, ...uids, 0);
+      // Advance the UID cursor to the highest UID we actually fetched.
+      // Using uidNext-1 would skip messages that arrive between fetch and status.
+      const newCursor = uids.length > 0 ? Math.max(...uids) : cfg.lastCheckedUid;
       if (newCursor > cfg.lastCheckedUid) {
         await db.update(schema.smtpConfigs).set({ lastCheckedUid: newCursor }).where(eq(schema.smtpConfigs.id, cfg.id));
       }

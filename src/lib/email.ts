@@ -7,7 +7,6 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import { pickSmtp, resolveSmtp, buildTransporter, markSent, markFailure } from "./smtpLoadBalancer";
-import { normalizeEmail } from "./normalize";
 
 /** Send a transactional email to the owner using the first healthy primary SMTP. */
 export async function sendOwnerEmail({
@@ -77,7 +76,7 @@ export async function sendCampaignEmail({
   html: string;
   sentEmailId: number;
 }): Promise<number> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "";
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   // Open-tracking pixel (best-effort; many clients block images).
   const pixel = baseUrl
     ? `<img src="${baseUrl}/api/track/open/${sentEmailId}" width="1" height="1" alt="" style="display:none" />`
@@ -108,4 +107,3 @@ export async function transporterForConfigId(configId: number) {
   return buildTransporter(row);
 }
 
-void normalizeEmail;

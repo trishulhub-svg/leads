@@ -23,8 +23,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 1. Enqueue (dedup gate inside).
   const enq = await enqueueCampaign(campaignId, leadIds);
 
-  // 2. Drain inline for as long as we safely can within the request budget.
-  const drain = await drainCampaign(campaignId, { maxJobs: 500, deadlineMs: 25_000 });
+  // 2. Drain inline for as long as we safely can (9s — safe for Vercel Hobby's 10s cap).
+  const drain = await drainCampaign(campaignId, { maxJobs: 300, deadlineMs: 9_000 });
 
   return NextResponse.json({
     ok: true,

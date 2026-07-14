@@ -83,35 +83,62 @@ export async function POST(req: Request) {
     }
   }
 
-  const portNum = Number(port) || 587;
-  const values: Partial<typeof schema.smtpConfigs.$inferInsert> = {
-    label,
-    role,
-    host,
-    port: portNum,
-    secure: secure ?? portNum === 465,
-    user: smtpUser,
-    fromName: fromName || "Trishulhub",
-    fromEmail,
-    dailyLimit: Number(dailyLimit) || 500,
-    imapHost: imapHost || null,
-    imapPort: imapPort ? Number(imapPort) : 993,
-    imapSecure: imapSecure ?? true,
-    imapUser: imapUser || null,
-  };
+  // For NEW configs, all fields are required with defaults. For UPDATEs, only
+  // set fields that were actually provided (omit → don't clobber existing value).
+  const isUpdate = Boolean(id);
+  const portNum = port !== undefined ? Number(port) || 587 : undefined;
+  const values: Partial<typeof schema.smtpConfigs.$inferInsert> = {};
+
+  if (label !== undefined) values.label = label;
+  if (role !== undefined) values.role = role;
+  if (host !== undefined) values.host = host;
+  if (portNum !== undefined) values.port = portNum;
+  if (secure !== undefined) values.secure = secure;
+  else if (portNum !== undefined) values.secure = portNum === 465;
+  if (smtpUser !== undefined) values.user = smtpUser;
+  if (fromName !== undefined) values.fromName = fromName || "Trishulhub";
+  if (fromEmail !== undefined) values.fromEmail = fromEmail;
+  if (dailyLimit !== undefined) values.dailyLimit = Number(dailyLimit) || 500;
+  if (imapHost !== undefined) values.imapHost = imapHost || null;
+  if (imapPort !== undefined) values.imapPort = imapPort ? Number(imapPort) : 993;
+  if (imapSecure !== undefined) values.imapSecure = imapSecure;
+  if (imapUser !== undefined) values.imapUser = imapUser || null;
 
   // Only re-encrypt if a new plaintext password was provided.
   if (password) values.passEnc = await encrypt(password);
   if (imapPassword) values.imapPassEnc = await encrypt(imapPassword);
 
-  if (id) {
+  if (isUpdate) {
+    if (Object.keys(values).length === 0) {
+      return NextResponse.json({ error: "No fields to update." }, { status: 400 });
+    }
     await db.update(schema.smtpConfigs).set(values).where(eq(schema.smtpConfigs.id, id));
     return NextResponse.json({ ok: true, id });
   } else {
+    // For new configs, fill in required defaults.
+    if (!host) return NextResponse.json({ error: "Host is required." }, { status: 400 });
+    if (!smtpUser) return NextResponse.json({ error: "Username is required." }, { status: 400 });
+    if (!fromEmail) return NextResponse.json({ error: "From email is required." }, { status: 400 });
     if (!password) return NextResponse.json({ error: "Password is required for a new SMTP." }, { status: 400 });
     const inserted = await db
       .insert(schema.smtpConfigs)
-      .values(values as typeof schema.smtpConfigs.$inferInsert)
+      .values({
+        label: label || "SMTP",
+        role,
+        host,
+        port: portNum ?? 587,
+        secure: secure ?? portNum === 465,
+        user: smtpUser,
+        fromName: fromName || "Trishulhub",
+        fromEmail,
+        dailyLimit: Number(dailyLimit) || 500,
+        passEnc: values.passEnc!,
+        imapHost: imapHost || null,
+        imapPort: imapPort ? Number(imapPort) : 993,
+        imapSecure: imapSecure ?? true,
+        imapUser: imapUser || null,
+        ...(values.imapPassEnc ? { imapPassEnc: values.imapPassEnc } : {}),
+      })
       .returning({ id: schema.smtpConfigs.id });
     return NextResponse.json({ ok: true, id: inserted[0].id });
   }

@@ -5,9 +5,10 @@
 //  - pickSmtp() returns the next healthy Primary whose sent_today < daily_limit,
 //    via round-robin (cursor persisted in settings).
 //  - When no healthy Primary is available, failover to Emergency SMTPs (same logic).
-//  - markFailure() marks an SMTP unhealthy (health check / hard auth failure).
-//  - markSent() increments sent_today; lazy-resets the counter when the day rolls over.
-import { eq, and, asc } from "drizzle-orm";
+//  - markFailure() increments a consecutive-failure counter; after 3 consecutive
+//    failures, marks the SMTP unhealthy. A successful send or test resets the counter.
+//  - markSent() uses an atomic SQL increment (sent_today = sent_today + 1).
+import { eq, and, asc, sql } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import { db, schema } from "./db";
 import { getSetting, setSetting } from "./settings";
@@ -24,6 +25,7 @@ export type ResolvedSmtp = {
 
 const RR_PRIMARY = "rr_smtp_primary";
 const RR_EMERGENCY = "rr_smtp_emergency";
+const FAILURE_THRESHOLD = 3; // consecutive failures before marking unhealthy
 
 /** Reset an SMTP's daily counter if it's a new day. */
 async function maybeResetCounter(row: typeof schema.smtpConfigs.$inferSelect) {
@@ -101,28 +103,52 @@ export async function resolveSmtp(row: typeof schema.smtpConfigs.$inferSelect): 
   };
 }
 
-/** Increment sent_today for an SMTP. */
+/**
+ * Increment sent_today atomically (SQL: sent_today = sent_today + 1).
+ * Also resets the failure counter on success.
+ */
 export async function markSent(smtpId: number): Promise<void> {
+  await db
+    .update(schema.smtpConfigs)
+    .set({ sentToday: sql`${schema.smtpConfigs.sentToday} + 1`, healthy: true, lastError: null })
+    .where(eq(schema.smtpConfigs.id, smtpId));
+}
+
+/**
+ * Record a failure. After FAILURE_THRESHOLD consecutive failures, mark unhealthy.
+ * We track consecutive failures via the lastError field (prefixed with a count).
+ */
+export async function markFailure(smtpId: number, error: string): Promise<void> {
   const row = await db
-    .select()
+    .select({ healthy: schema.smtpConfigs.healthy, lastError: schema.smtpConfigs.lastError })
     .from(schema.smtpConfigs)
     .where(eq(schema.smtpConfigs.id, smtpId))
     .limit(1)
     .then((r) => r[0]);
   if (!row) return;
-  const after = (await maybeResetCounter(row)).sentToday + 1;
-  await db.update(schema.smtpConfigs).set({ sentToday: after }).where(eq(schema.smtpConfigs.id, smtpId));
+
+  // Parse the current failure count from the lastError prefix "fails:N:...".
+  let count = 1;
+  if (row.lastError?.startsWith("fails:")) {
+    const match = row.lastError.match(/^fails:(\d+):/);
+    if (match) count = parseInt(match[1], 10) + 1;
+  }
+
+  const prefix = `fails:${count}:`;
+  if (count >= FAILURE_THRESHOLD) {
+    await db
+      .update(schema.smtpConfigs)
+      .set({ healthy: false, lastError: `${prefix}${error.slice(0, 450)}`, lastCheckedAt: new Date() })
+      .where(eq(schema.smtpConfigs.id, smtpId));
+  } else {
+    await db
+      .update(schema.smtpConfigs)
+      .set({ lastError: `${prefix}${error.slice(0, 450)}`, lastCheckedAt: new Date() })
+      .where(eq(schema.smtpConfigs.id, smtpId));
+  }
 }
 
-/** Mark an SMTP unhealthy (e.g. auth failure / health-check fail) and record the error. */
-export async function markFailure(smtpId: number, error: string): Promise<void> {
-  await db
-    .update(schema.smtpConfigs)
-    .set({ healthy: false, lastError: error.slice(0, 500), lastCheckedAt: new Date() })
-    .where(eq(schema.smtpConfigs.id, smtpId));
-}
-
-/** Mark an SMTP healthy again (e.g. a successful test / send). */
+/** Mark an SMTP healthy again (e.g. a successful test / send). Resets failure counter. */
 export async function markHealthy(smtpId: number): Promise<void> {
   await db
     .update(schema.smtpConfigs)

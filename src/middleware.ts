@@ -1,9 +1,12 @@
 // src/middleware.ts
-// Auth gate. Public routes: /login, /forgot-password, /reset-password, open-tracking pixel.
+// Auth gate for PAGES only. All /api/* routes are excluded — each API route
+// handler does its own auth (getCurrentUser() for cookie-auth routes,
+// CRON_SECRET for cron endpoints). This prevents the middleware from 307-
+// redirecting fetch() calls and Vercel Cron (which sends headers, not cookies).
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const PUBLIC = ["/login", "/forgot-password", "/reset-password"];
+const PUBLIC_PAGES = ["/login", "/forgot-password", "/reset-password"];
 const COOKIE = "tl_session";
 
 async function isAuthenticated(token?: string): Promise<boolean> {
@@ -26,12 +29,7 @@ function sanitizeRedirect(path: string): string {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // The open-tracking pixel must be publicly accessible.
-  if (pathname.startsWith("/api/track/open/")) {
-    return NextResponse.next();
-  }
-
-  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+  if (PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     // If already logged in and visiting /login, send to dashboard.
     if (pathname === "/login" && (await isAuthenticated(req.cookies.get(COOKIE)?.value))) {
       return NextResponse.redirect(new URL("/", req.url));
@@ -49,7 +47,7 @@ export async function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
+// Exclude ALL /api/* routes (each route handler does its own auth).
 export const config = {
-  // Run on everything except static assets and the open-track pixel is allowed above.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/track).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
 };

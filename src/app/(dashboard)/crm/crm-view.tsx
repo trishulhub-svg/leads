@@ -48,22 +48,34 @@ export function CrmView({ initialEntries }: { initialEntries: Entry[] }) {
 
   async function moveStage(id: number, stage: Stage) {
     setUpdating(id);
+    const prevStage = entries.find((e) => e.id === id)?.stage;
     // Optimistic update.
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, stage } : e)));
-    await fetch("/api/crm", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, stage }),
-    });
+    try {
+      const res = await fetch("/api/crm", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, stage }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+    } catch {
+      // Roll back on failure.
+      setEntries((prev) => prev.map((e) => (e.id === id && prevStage ? { ...e, stage: prevStage } : e)));
+    }
     setUpdating(null);
   }
 
   async function saveNotes(id: number, notes: string) {
-    await fetch("/api/crm", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, notes }),
-    });
+    try {
+      const res = await fetch("/api/crm", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, notes }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   if (entries.length === 0) {
@@ -147,7 +159,7 @@ function KanbanCard({
   entry: Entry;
   color: string;
   onMove: (id: number, stage: Stage) => void;
-  onSaveNotes: (id: number, notes: string) => void;
+  onSaveNotes: (id: number, notes: string) => Promise<boolean>;
   updating: boolean;
 }) {
   const [editingNotes, setEditingNotes] = React.useState(false);
@@ -178,9 +190,9 @@ function KanbanCard({
               size="sm"
               variant="outline"
               className="h-6 text-xs"
-              onClick={() => {
-                onSaveNotes(entry.id, notes);
-                setEditingNotes(false);
+              onClick={async () => {
+                const ok = await onSaveNotes(entry.id, notes);
+                if (ok) setEditingNotes(false);
               }}
             >
               Save
