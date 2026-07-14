@@ -4,6 +4,7 @@
 // and extracts all emails + mailto: links. Full crawl / search-engine harvesting is a
 // future enhancement behind a clearly-marked seam (scrapeBySearch).
 import { extractEmails, normalizeEmail } from "./normalize";
+import { fetchPublicHtml } from "./safe-fetch";
 
 // Domains that produce false-positive "emails" (image filenames, etc.)
 const JUNK_SUFFIX = /\.(png|jpe?g|gif|webp|svg|css|js|ico|woff2?|ttf)$/i;
@@ -27,25 +28,8 @@ export async function scrapeUrl(url: string, _niche?: string): Promise<ScrapeRes
   let target = url.trim();
   if (!/^https?:\/\//i.test(target)) target = "https://" + target;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(target, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        // A real browser UA — many sites block the default fetch UA.
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-    clearTimeout(timeout);
-    if (!res.ok) {
-      return { ok: false, emails: [], error: `Request failed: HTTP ${res.status}`, fetchedAt: new Date().toISOString() };
-    }
-    const html = await res.text();
-    const company = guessCompany(html, target);
+    const { html, finalUrl } = await fetchPublicHtml(target, { timeoutMs: 15_000 });
+    const company = guessCompany(html, finalUrl);
     const raw = extractEmails(html).filter((e) => !JUNK_SUFFIX.test(e));
     const seen = new Set<string>();
     const emails: ScrapedEmail[] = [];
