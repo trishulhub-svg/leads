@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-campaigns",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/check-replies",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/reset-smtp-limits",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
