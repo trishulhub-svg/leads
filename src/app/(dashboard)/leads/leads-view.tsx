@@ -276,7 +276,14 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>Public business data from OpenStreetMap</span>
+            <a
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 hover:underline"
+            >
+              © OpenStreetMap contributors
+            </a>
             <span>Website and contact-page scanning</span>
             <span>Optional DeepSeek relevance ranking</span>
           </div>

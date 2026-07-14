@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import { decrypt, encrypt } from "./crypto";
+import { assertSafePublicUrl } from "./safe-fetch";
 
 const KEYS = {
   apiKey: "ai_deepseek_api_key",
@@ -59,7 +60,7 @@ export async function saveAiConfig(input: {
   baseUrl: string;
   model: string;
 }): Promise<void> {
-  const baseUrl = normalizeBaseUrl(input.baseUrl);
+  const baseUrl = await normalizeBaseUrl(input.baseUrl);
   const model = input.model.trim();
   if (!model || model.length > 100) throw new Error("Enter a valid model identifier.");
 
@@ -83,7 +84,7 @@ export async function clearDatabaseAiKey(): Promise<void> {
   await db.delete(schema.settings).where(eq(schema.settings.key, KEYS.apiKey));
 }
 
-function normalizeBaseUrl(value: string): string {
+async function normalizeBaseUrl(value: string): Promise<string> {
   const raw = value.trim().replace(/\/+$/, "");
   let url: URL;
   try {
@@ -94,6 +95,7 @@ function normalizeBaseUrl(value: string): string {
   if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && url.protocol === "http:")) {
     throw new Error("The AI API URL must use HTTPS.");
   }
+  await assertSafePublicUrl(url.toString());
   return url.toString().replace(/\/$/, "");
 }
 
@@ -129,7 +131,7 @@ export async function rankBusinesses(
       {
         role: "system",
         content:
-          "You rank verified business records for lead research. Never invent records. Return only a JSON array with objects: id, relevant (boolean), reason (max 12 words).",
+          'You rank verified business records for lead research. Never invent records. Return only JSON shaped as {"businesses":[{"id":"...","relevant":true,"reason":"max 12 words"}]}.',
       },
       {
         role: "user",
@@ -172,6 +174,7 @@ async function callDeepSeek(
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: "POST",
       signal: controller.signal,
+      redirect: "error",
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
