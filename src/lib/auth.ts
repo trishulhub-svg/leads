@@ -1,7 +1,8 @@
 // src/lib/auth.ts
 // Single-owner auth: jose HS256 JWT in httpOnly cookie + bcrypt + DB sessions.
 import { randomInt } from "crypto";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose/jwt/sign";
+import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
 import { eq, and, isNull, gte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -12,9 +13,9 @@ const COOKIE = "tl_session";
 
 function getSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
-  if (!s || s.trim().length < 8) {
+  if (!s || s.trim().length < 32) {
     throw new Error(
-      "AUTH_SECRET is required and must be at least 8 characters. " +
+      "AUTH_SECRET is required and must be at least 32 characters. " +
         "Generate one: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
     );
   }

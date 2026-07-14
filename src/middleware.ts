@@ -4,7 +4,7 @@
 // CRON_SECRET for cron endpoints). This prevents the middleware from 307-
 // redirecting fetch() calls and Vercel Cron (which sends headers, not cookies).
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify } from "jose/jwt/verify";
 
 const PUBLIC_PAGES = ["/login", "/forgot-password", "/reset-password"];
 const COOKIE = "tl_session";

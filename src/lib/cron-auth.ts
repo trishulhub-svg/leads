@@ -2,6 +2,7 @@
 // Shared auth helper for Vercel Cron routes. Fail CLOSED when CRON_SECRET
 // is unset — never allow open access.
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 export function authorizeCron(req: Request): NextResponse | null {
   const secret = process.env.CRON_SECRET;
@@ -11,9 +12,14 @@ export function authorizeCron(req: Request): NextResponse | null {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
   const authHeader = req.headers.get("authorization");
-  const url = new URL(req.url);
-  const providedSecret = authHeader?.replace("Bearer ", "") || url.searchParams.get("secret");
-  if (providedSecret !== secret) {
+  const providedSecret = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+  const expected = Buffer.from(secret);
+  const provided = Buffer.from(providedSecret);
+  const valid =
+    expected.length === provided.length &&
+    expected.length > 0 &&
+    timingSafeEqual(expected, provided);
+  if (!valid) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return null; // authorized

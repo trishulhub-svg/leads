@@ -9,7 +9,7 @@ import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqli
 export const SMTP_ROLES = ["primary", "emergency"] as const;
 export type SmtpRole = (typeof SMTP_ROLES)[number];
 
-export const LEAD_SOURCES = ["scrape", "csv", "manual"] as const;
+export const LEAD_SOURCES = ["discovery", "scrape", "csv", "manual"] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
 export const LEAD_STATUS = ["raw", "blacklisted"] as const;

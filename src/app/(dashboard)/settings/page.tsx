@@ -2,13 +2,16 @@
 import { db, schema } from "@/lib/db";
 import { ChangePasswordForm } from "./change-password-form";
 import { SmtpManager } from "./smtp-manager";
+import { AiSettings } from "./ai-settings";
+import { getPublicAiConfig } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [smtpRows, user] = await Promise.all([
+  const [smtpRows, user, aiConfig] = await Promise.all([
     db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id),
     db.select().from(schema.users).limit(1).then((r) => r[0]),
+    getPublicAiConfig(),
   ]);
 
   // Strip secrets before sending to the client.
@@ -39,9 +42,17 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your 8 SMTP servers and account.</p>
+        <p className="text-sm text-muted-foreground">Manage lead intelligence, email infrastructure, and account security.</p>
       </div>
 
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">Lead intelligence</h2>
+        <AiSettings initial={aiConfig} />
+      </div>
+
+      <div className="border-t pt-8">
+        <h2 className="mb-4 text-lg font-semibold">Email infrastructure</h2>
+      </div>
       <SmtpManager initial={safeSmtp} />
 
       <div className="border-t pt-8">

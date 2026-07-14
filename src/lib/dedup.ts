@@ -32,7 +32,7 @@ export type DedupReport = {
  */
 export async function importLeads(
   rows: ImportRow[],
-  source: "scrape" | "csv" | "manual",
+  source: "discovery" | "scrape" | "csv" | "manual",
   niche?: string
 ): Promise<DedupReport> {
   const report: DedupReport = {

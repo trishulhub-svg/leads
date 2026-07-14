@@ -9,9 +9,15 @@ import { hashPassword } from "../src/lib/auth";
 // relative paths. The rest of the app (run via Next/webpack) uses @/ aliases.
 
 async function seed() {
-  const email = (process.env.OWNER_EMAIL || "founder@example.com").toLowerCase();
-  const password = process.env.OWNER_PASSWORD || "ChangeMe123!";
+  const email = process.env.OWNER_EMAIL?.trim().toLowerCase();
+  const password = process.env.OWNER_PASSWORD;
   const name = process.env.OWNER_NAME || "Founder";
+  if (!email || !password) {
+    throw new Error("OWNER_EMAIL and OWNER_PASSWORD must be set before seeding.");
+  }
+  if (password.length < 12) {
+    throw new Error("OWNER_PASSWORD must be at least 12 characters.");
+  }
 
   console.log(`[seed] ensuring owner ${email}…`);
   const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1).then((r) => r[0]);

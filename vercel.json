@@ -6,11 +6,11 @@
     },
     {
       "path": "/api/cron/check-replies",
-      "schedule": "0 0 * * *"
+      "schedule": "15 0 * * *"
     },
     {
       "path": "/api/cron/reset-smtp-limits",
-      "schedule": "0 0 * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }

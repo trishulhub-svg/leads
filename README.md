@@ -51,19 +51,32 @@ npm run dev
    - `OWNER_EMAIL`, `OWNER_PASSWORD` (only used by seed)
    - `NEXT_PUBLIC_BASE_URL` (your Vercel URL, e.g. `https://your-app.vercel.app`)
    - `CRON_SECRET` (a random string — secures the cron endpoints)
+   - Optional: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL`
+     (these can also be saved securely from Settings)
 
-The `vercel.json` cron schedules are already configured:
-- **Every minute**: drains the sending queue (`/api/cron/process-campaigns`)
-- **Every 5 minutes**: polls inboxes for replies (`/api/cron/check-replies`)
-- **Daily at midnight**: resets SMTP daily counters (`/api/cron/reset-smtp-limits`)
+The checked-in `vercel.json` uses Hobby-compatible once-daily schedules so a
+new deployment works without a paid plan:
+- **00:00 UTC daily**: drains the sending queue (`/api/cron/process-campaigns`)
+- **00:15 UTC daily**: polls inboxes for replies (`/api/cron/check-replies`)
+- **01:00 UTC daily**: resets SMTP daily counters (`/api/cron/reset-smtp-limits`)
 
-> **Throughput note:** Vercel **Hobby** (free) limits cron to once/day and 60s function timeouts — fine for testing. For the 3,000-email batches the spec mentions, upgrade to **Vercel Pro** ($20/mo) for per-minute cron + 300s timeouts. The code is identical either way.
+> **Throughput note:** Vercel **Hobby** limits each cron to once/day and does not
+> guarantee minute-level precision. For active outreach, upgrade to **Vercel
+> Pro**, then change `process-campaigns` to `* * * * *` and `check-replies` to
+> `*/5 * * * *`. You may also invoke the protected cron endpoints from another
+> scheduler using the `Authorization: Bearer <CRON_SECRET>` header.
 
 ---
 
 ## Features
 
 ### 1. Lead Acquisition
+- **Location discovery (India)**: enter a city/locality/PIN code, business type,
+  and radius. The app finds public business records through OpenStreetMap,
+  scans their websites and contact pages, and imports discovered emails.
+- **DeepSeek ranking**: optionally ranks verified discovery results for relevance.
+  The API URL and model identifier are configurable, including future DeepSeek
+  V4 Flash identifiers exposed by your provider. AI does not invent lead records.
 - **URL scraping**: fetch any page and extract all email addresses + `mailto:` links.
 - **File import**: upload CSV, Excel (.xlsx), or TXT files. CSV/Excel columns are auto-detected (email, first_name, company).
 - **Smart deduplication**: a unique index on `sent_emails` guarantees an email can only ever be sent once — **if an email was ever sent before, it cannot be added to a new campaign** (enforced at the database level).
@@ -113,6 +126,8 @@ The `vercel.json` cron schedules are already configured:
 | Auth | `jose` JWT + bcrypt + httpOnly cookie + edge middleware |
 | Email sending | nodemailer (8-SMTP pool with load balancing + failover) |
 | Reply monitoring | ImapFlow + mailparser (IMAP polling via Vercel Cron) |
+| Lead discovery | OpenStreetMap/Nominatim/Overpass + public website scanning |
+| AI ranking | DeepSeek-compatible chat completions API (optional) |
 | Queue | Turso-backed job table drained by Vercel Cron (replaces Redis/BullMQ) |
 | UI | Tailwind CSS + shadcn-style components + next-themes (dark/light) |
 

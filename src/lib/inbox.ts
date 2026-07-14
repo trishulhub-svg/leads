@@ -58,7 +58,6 @@ async function checkOneInbox(cfg: typeof schema.smtpConfigs.$inferSelect): Promi
     await client.connect();
     const lock = await client.getMailboxLock("INBOX");
     try {
-      const status = await client.status("INBOX", { uidNext: true });
       // Fetch messages newer than the last UID we saw.
       const range = cfg.lastCheckedUid > 0 ? `${cfg.lastCheckedUid + 1}:*` : "1:*";
       const uids: number[] = [];
