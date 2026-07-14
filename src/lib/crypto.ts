@@ -7,8 +7,8 @@ const subtle = webcrypto.subtle;
 
 async function rawKey(): Promise<CryptoKey> {
   const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 8) {
-    throw new Error("AUTH_SECRET is required (min 8 chars) to encrypt SMTP credentials.");
+  if (!secret || secret.length < 32) {
+    throw new Error("AUTH_SECRET is required (min 32 chars) to encrypt SMTP credentials.");
   }
   const hash = await subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);

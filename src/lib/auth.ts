@@ -12,9 +12,9 @@ const COOKIE = "tl_session";
 
 function getSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
-  if (!s || s.trim().length < 8) {
+  if (!s || s.trim().length < 32) {
     throw new Error(
-      "AUTH_SECRET is required and must be at least 8 characters. " +
+      "AUTH_SECRET is required and must be at least 32 characters. " +
         "Generate one: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
     );
   }
