@@ -6,8 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // xlsx ships untranspiled ESM/CJS from node; allow Next to bundle it.
-  serverExternalPackages: ["xlsx", "nodemailer", "imapflow", "mailparser"],
+  serverExternalPackages: ["nodemailer", "imapflow", "mailparser"],
   webpack: (config) => {
     // Map @/drizzle/* and @drizzle/* → ./drizzle/* so the schema (which lives
     // outside src/) is importable from app + lib code.

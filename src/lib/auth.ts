@@ -1,7 +1,8 @@
 // src/lib/auth.ts
 // Single-owner auth: jose HS256 JWT in httpOnly cookie + bcrypt + DB sessions.
 import { randomInt } from "crypto";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose/jwt/sign";
+import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
 import { eq, and, isNull, gte } from "drizzle-orm";
 import bcrypt from "bcryptjs";

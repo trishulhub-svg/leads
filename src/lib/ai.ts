@@ -63,7 +63,7 @@ export async function saveAiConfig(input: {
   const model = input.model.trim();
   if (!model || model.length > 100) throw new Error("Enter a valid model identifier.");
 
-  const updates = [
+  const updates: Array<{ key: string; value: string }> = [
     { key: KEYS.baseUrl, value: baseUrl },
     { key: KEYS.model, value: model },
   ];

@@ -5,7 +5,6 @@
 import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../src/lib/db";
-import { encrypt } from "../src/lib/crypto";
 import { enqueueCampaign, refreshCampaignCounters } from "../src/lib/campaignEngine";
 
 function assert(cond: boolean, msg: string) {

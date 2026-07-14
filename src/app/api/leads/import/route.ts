@@ -27,12 +27,17 @@ export async function POST(req: Request) {
   try {
     if (name.endsWith(".csv")) {
       rows = await parseCsv(buf);
-    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    } else if (name.endsWith(".xlsx")) {
       rows = await parseExcel(buf);
-    } else {
+    } else if (name.endsWith(".txt")) {
       // Treat as text: extract every email-looking string.
       const text = buf.toString("utf-8");
       rows = extractEmails(text).map((email) => ({ email }));
+    } else {
+      return NextResponse.json(
+        { error: "Unsupported file type. Upload CSV, XLSX, or TXT." },
+        { status: 400 }
+      );
     }
   } catch (err: any) {
     return NextResponse.json({ error: `Failed to parse file: ${err?.message ?? err}` }, { status: 400 });
@@ -66,16 +71,18 @@ async function parseCsv(buf: Buffer): Promise<ImportRow[]> {
     .filter((r) => isValidEmail(r.email));
 }
 
-/** Parse Excel with SheetJS. */
+/** Parse modern XLSX files with read-excel-file. */
 async function parseExcel(buf: Buffer): Promise<ImportRow[]> {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(buf, { type: "buffer" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-  return json
-    .map((row) => {
+  const { readSheet } = await import("read-excel-file/node");
+  const sheet = await readSheet(buf);
+  const headers = (sheet[0] || []).map((cell) => String(cell || "").trim().toLowerCase());
+  return sheet
+    .slice(1)
+    .map((cells) => {
       const lower: Record<string, string> = {};
-      for (const [k, v] of Object.entries(row)) lower[k.trim().toLowerCase()] = String(v || "");
+      headers.forEach((header, index) => {
+        if (header) lower[header] = String(cells[index] || "").trim();
+      });
       const email =
         findColumn(lower, ["email", "e-mail", "mail", "email address"]) || "";
       const firstName =

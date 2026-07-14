@@ -382,7 +382,7 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
               value={scrapeNiche}
               onChange={(e) => setScrapeNiche(e.target.value)}
             />
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.txt" onChange={doImport} className="hidden" />
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.txt" onChange={doImport} className="hidden" />
             <Button
               variant="outline"
               className="w-full"
