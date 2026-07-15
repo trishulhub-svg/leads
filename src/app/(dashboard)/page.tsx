@@ -7,6 +7,7 @@ import { Mail, Eye, MessageSquare, Trophy, Users, Send, KanbanSquare, Activity, 
 import { timeAgo } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { ProductTour } from "@/components/product-tour";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,10 @@ export default async function DashboardPage() {
         title="Good to see you."
         description="A clear view of your outreach performance, conversations, and pipeline health."
       />
+
+      <section id="product-tour">
+        <ProductTour />
+      </section>
 
       {/* Primary metrics */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

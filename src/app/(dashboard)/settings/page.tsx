@@ -1,6 +1,7 @@
 // src/app/(dashboard)/settings/page.tsx
 import { db, schema } from "@/lib/db";
 import { ChangePasswordForm } from "./change-password-form";
+import { ChangeEmailForm } from "./change-email-form";
 import { SmtpManager } from "./smtp-manager";
 import { AiSettings } from "./ai-settings";
 import { getPublicAiConfig } from "@/lib/ai";
@@ -91,6 +92,7 @@ export default async function SettingsPage() {
             </div>
           </div>
           <ChangePasswordForm />
+          <ChangeEmailForm currentEmail={user?.email || ""} />
         </div>
       </div>
     </div>

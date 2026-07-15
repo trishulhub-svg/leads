@@ -203,7 +203,12 @@ function generateOtp(): string {
 export async function sendForgotOtp(
   email: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const rl = await checkRateLimit(`forgot:${email.toLowerCase()}`, { max: 3, windowMs: 10 * 60 * 1000 });
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !normalized.includes("@")) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+
+  const rl = await checkRateLimit(`forgot:${normalized}`, { max: 3, windowMs: 10 * 60 * 1000 });
   if (!rl.allowed && !rl.dbError) {
     return { ok: false, error: `Too many attempts. Try again in ${rl.retryAfter ?? 60}s.` };
   }
@@ -211,45 +216,54 @@ export async function sendForgotOtp(
   const user = await db
     .select({ id: schema.users.id, name: schema.users.name })
     .from(schema.users)
-    .where(eq(schema.users.email, email.toLowerCase()))
+    .where(eq(schema.users.email, normalized))
     .limit(1)
     .then((r) => r[0]);
-  // Do not reveal whether the email exists.
-  if (!user) return { ok: true };
+
+  // Only send a code when this email exists in the workspace database.
+  if (!user) {
+    return { ok: false, error: "No account found for that email. Use the email registered for this workspace." };
+  }
 
   const otp = generateOtp();
   const hashed = await bcrypt.hash(otp, 12);
-  const key = `forgot_otp_${email.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const key = `forgot_otp_${normalized.replace(/[^a-z0-9]/g, "")}`;
+  const payload = JSON.stringify({ otp: hashed, userId: user.id, expiresAt: Date.now() + 10 * 60 * 1000 });
   await db
     .insert(schema.settings)
-    .values({
-      key,
-      value: JSON.stringify({ otp: hashed, userId: user.id, expiresAt: Date.now() + 10 * 60 * 1000 }),
-    })
+    .values({ key, value: payload })
     .onConflictDoUpdate({
       target: schema.settings.key,
-      set: {
-        value: JSON.stringify({ otp: hashed, userId: user.id, expiresAt: Date.now() + 10 * 60 * 1000 }),
-      },
+      set: { value: payload },
     });
 
-  const { sendOwnerEmail } = await import("@/lib/email");
-  await sendOwnerEmail({
-    to: email,
-    subject: "Password Reset OTP — Trishulhub Leads",
-    html: `
+  try {
+    const { sendOwnerEmail } = await import("@/lib/email");
+    await sendOwnerEmail({
+      to: normalized,
+      subject: "Password reset code — Trishulhub Leads",
+      html: `
       <div style="max-width:500px;margin:0 auto;font-family:Arial,sans-serif;color:#333">
-        <h2 style="color:#0f172a">Password Reset Request</h2>
+        <h2 style="color:#0f172a">Password reset</h2>
         <p>Hello <strong>${user.name}</strong>,</p>
-        <p>Use the following OTP to reset your password. It expires in 10 minutes.</p>
+        <p>Use this 6-digit code to reset your password. It expires in 10 minutes.</p>
         <div style="margin:24px 0;text-align:center">
           <span style="display:inline-block;padding:12px 32px;font-size:28px;font-weight:700;letter-spacing:8px;background:#f3f4f6;border-radius:8px;color:#0f172a">${otp}</span>
         </div>
-        <p style="color:#6b7280;font-size:13px">If you did not request this, please ignore this email.</p>
+        <p style="color:#6b7280;font-size:13px">If you did not request this, you can ignore this email.</p>
       </div>
     `,
-  });
+    });
+  } catch (err) {
+    console.error("[auth] failed to send reset code email:", err);
+    await db.delete(schema.settings).where(eq(schema.settings.key, key));
+    return {
+      ok: false,
+      error: "Could not send the reset code. Check your SMTP in Settings and try again.",
+    };
+  }
 
+  // Never return the OTP to the client — it is email-only.
   return { ok: true };
 }
 
@@ -335,6 +349,126 @@ export async function changePassword(
     .set({ revokedAt: new Date() })
     .where(and(eq(schema.sessions.userId, userId), isNull(schema.sessions.revokedAt)));
   return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Change login email — OTP sent to the NEW address via bound SMTP.
+// ──────────────────────────────────────────────────────────────────────────
+export async function requestEmailChange(
+  userId: number,
+  currentPassword: string,
+  newEmail: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const normalized = newEmail.trim().toLowerCase();
+  if (!normalized.includes("@") || normalized.length < 5) {
+    return { ok: false, error: "Enter a valid new email address." };
+  }
+
+  const rl = await checkRateLimit(`email_change:${userId}`, { max: 3, windowMs: 15 * 60 * 1000 });
+  if (!rl.allowed && !rl.dbError) {
+    return { ok: false, error: `Too many attempts. Try again in ${rl.retryAfter ?? 60}s.` };
+  }
+
+  const user = await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1).then((r) => r[0]);
+  if (!user) return { ok: false, error: "User not found." };
+  if (!(await bcrypt.compare(currentPassword, user.password))) {
+    return { ok: false, error: "Current password is incorrect." };
+  }
+  if (user.email.toLowerCase() === normalized) {
+    return { ok: false, error: "That is already your login email." };
+  }
+
+  const taken = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.email, normalized))
+    .limit(1)
+    .then((r) => r[0]);
+  if (taken) return { ok: false, error: "That email is already in use." };
+
+  const otp = generateOtp();
+  const hashed = await bcrypt.hash(otp, 12);
+  const key = `email_change_${userId}`;
+  const payload = JSON.stringify({
+    otp: hashed,
+    newEmail: normalized,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+  await db
+    .insert(schema.settings)
+    .values({ key, value: payload })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value: payload } });
+
+  try {
+    const { sendOwnerEmail } = await import("@/lib/email");
+    await sendOwnerEmail({
+      to: normalized,
+      subject: "Confirm your new login email — Trishulhub Leads",
+      html: `
+      <div style="max-width:500px;margin:0 auto;font-family:Arial,sans-serif;color:#333">
+        <h2 style="color:#0f172a">Confirm email change</h2>
+        <p>Hello <strong>${user.name}</strong>,</p>
+        <p>Enter this 6-digit code in Settings to change your login email to <strong>${normalized}</strong>.</p>
+        <div style="margin:24px 0;text-align:center">
+          <span style="display:inline-block;padding:12px 32px;font-size:28px;font-weight:700;letter-spacing:8px;background:#f3f4f6;border-radius:8px;color:#0f172a">${otp}</span>
+        </div>
+        <p style="color:#6b7280;font-size:13px">This code expires in 10 minutes. If you did not request this, ignore the email.</p>
+      </div>
+    `,
+    });
+  } catch (err) {
+    console.error("[auth] failed to send email-change code:", err);
+    await db.delete(schema.settings).where(eq(schema.settings.key, key));
+    return {
+      ok: false,
+      error: "Could not send the confirmation code. Check your SMTP in Settings and try again.",
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function confirmEmailChange(
+  userId: number,
+  newEmail: string,
+  otp: string
+): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  const normalized = newEmail.trim().toLowerCase();
+  const code = otp.trim();
+  if (!/^\d{6}$/.test(code)) return { ok: false, error: "Enter the 6-digit code from your email." };
+
+  const rl = await checkRateLimit(`email_change_verify:${userId}`, { max: 5, windowMs: 15 * 60 * 1000 });
+  if (!rl.allowed && !rl.dbError) return { ok: false, error: "Too many attempts. Try again later." };
+
+  const key = `email_change_${userId}`;
+  const row = await db.select().from(schema.settings).where(eq(schema.settings.key, key)).limit(1).then((r) => r[0]);
+  if (!row) return { ok: false, error: "No email change was requested. Start again." };
+
+  let data: { otp: string; newEmail: string; expiresAt: number };
+  try {
+    data = JSON.parse(row.value);
+  } catch {
+    await db.delete(schema.settings).where(eq(schema.settings.key, key));
+    return { ok: false, error: "Code record corrupted. Please request a new one." };
+  }
+  if (Date.now() > data.expiresAt) {
+    await db.delete(schema.settings).where(eq(schema.settings.key, key));
+    return { ok: false, error: "Code has expired. Request a new one." };
+  }
+  if (data.newEmail !== normalized) {
+    return { ok: false, error: "Email does not match the pending change request." };
+  }
+  if (!(await bcrypt.compare(code, data.otp))) return { ok: false, error: "Invalid confirmation code." };
+
+  await db.update(schema.users).set({ email: normalized }).where(eq(schema.users.id, userId));
+  await db.delete(schema.settings).where(eq(schema.settings.key, key));
+  // Force re-login so the session cookie picks up the new email.
+  await db
+    .update(schema.sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(schema.sessions.userId, userId), isNull(schema.sessions.revokedAt)));
+
+  return { ok: true, email: normalized };
 }
 
 // Suppress unused-import warning for gte (kept for future expirer job).

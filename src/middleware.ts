@@ -49,5 +49,6 @@ export async function middleware(req: NextRequest) {
 
 // Exclude ALL /api/* routes (each route handler does its own auth).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
+  // Public static assets under /tour (product walkthrough video) skip the auth gate.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api|tour).*)"],
 };
