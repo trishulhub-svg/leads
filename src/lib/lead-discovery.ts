@@ -6,6 +6,7 @@ const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const OVERPASS_URLS = [
   "https://overpass.private.coffee/api/interpreter",
   "https://overpass-api.de/api/interpreter",
+  "https://z.overpass-api.de/api/interpreter",
 ] as const;
 const USER_AGENT = "TrishulhubLeads/1.0 (+https://trishulhub.com)";
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -161,12 +162,10 @@ async function searchOpenStreetMap(
 out center 160;`;
   const errors: string[] = [];
 
-  // Try both independently operated global instances, then retry the first
-  // after a short backoff. Per-attempt timeouts keep the whole route inside the
-  // serverless execution budget.
-  const attempts = [OVERPASS_URLS[0], OVERPASS_URLS[1], OVERPASS_URLS[0]];
-  for (let attempt = 0; attempt < attempts.length; attempt++) {
-    const endpoint = attempts[attempt];
+  // Try global endpoints from two operators with a short backoff. Per-attempt
+  // timeouts keep the whole route inside the serverless execution budget.
+  for (let attempt = 0; attempt < OVERPASS_URLS.length; attempt++) {
+    const endpoint = OVERPASS_URLS[attempt];
     if (attempt > 0) await wait(600 * attempt);
     try {
       const response = await fetch(endpoint, {
