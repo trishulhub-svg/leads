@@ -143,6 +143,14 @@ export function DashboardShell({
               <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_0_3px_hsl(var(--success)/0.12)]" />
               Workspace live
             </div>
+            {pathname === "/" ? null : (
+              <Link
+                href="/#product-tour"
+                className="hidden rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:inline"
+              >
+                Tour
+              </Link>
+            )}
             <ThemeToggle />
           </div>
         </header>

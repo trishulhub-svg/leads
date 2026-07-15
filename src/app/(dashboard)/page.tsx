@@ -59,7 +59,9 @@ export default async function DashboardPage() {
         description="A clear view of your outreach performance, conversations, and pipeline health."
       />
 
-      <ProductTour />
+      <section id="product-tour">
+        <ProductTour />
+      </section>
 
       {/* Primary metrics */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

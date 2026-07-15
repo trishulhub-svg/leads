@@ -20,6 +20,7 @@ export function ForgotForm() {
   const [otpState, otpAction, otpPending] = useActionState(verifyOtpAction, null);
 
   React.useEffect(() => {
+    // Only advance when a code was actually sent to a known account.
     if (reqState?.ok) setStage("verify");
   }, [reqState]);
 
@@ -35,9 +36,9 @@ export function ForgotForm() {
       title={stage === "request" ? "Reset your password" : stage === "verify" ? "Check your inbox" : "Choose a new password"}
       description={
         stage === "request"
-          ? "We’ll send a secure one-time code to your owner email."
+          ? "We’ll email a one-time code only if this address is registered for this workspace."
           : stage === "verify"
-            ? "Enter the six-digit code to verify your identity."
+            ? "Enter the six-digit code from your email — it is never shown on this page."
             : "Create a strong password for your workspace."
       }
       icon={KeyRound}
@@ -61,26 +62,34 @@ export function ForgotForm() {
           {stage === "request" && (
             <form
               action={(fd) => {
-                setEmail(String(fd.get("email") || ""));
+                setEmail(String(fd.get("email") || "").trim().toLowerCase());
                 reqAction(fd);
               }}
               className="space-y-4"
             >
               <p className="text-sm text-muted-foreground">
-                Enter your email and we&apos;ll send a one-time code to reset your password.
+                Enter the owner email already saved in this workspace. Unknown emails cannot request a reset.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Registered email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="email" name="email" type="email" required placeholder="you@example.com" className="pl-9" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="owner@yourcompany.com"
+                    className="pl-9"
+                  />
                 </div>
               </div>
               {reqState?.error && (
                 <Alert variant="error">{reqState.error}</Alert>
               )}
               {reqState?.ok && (
-                <Alert variant="success">If the email exists, a reset code has been sent.</Alert>
+                <Alert variant="success">Reset code sent. Check your inbox (and spam folder).</Alert>
               )}
               <Button type="submit" disabled={reqPending} className="w-full">
                 {reqPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -93,20 +102,25 @@ export function ForgotForm() {
             <form action={otpAction} className="space-y-4">
               <input type="hidden" name="email" value={email} />
               <p className="text-sm text-muted-foreground">
-                Enter the 6-digit code we sent to <strong>{email}</strong>.
+                We sent a 6-digit code to <strong>{email}</strong>. Enter it below — codes are only delivered by email.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="otp">Reset code</Label>
+                <Label htmlFor="otp">Email code</Label>
                 <Input
                   id="otp"
                   name="otp"
                   inputMode="numeric"
-                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
                   maxLength={6}
                   required
-                  placeholder="123456"
-                  className="text-center text-2xl tracking-[0.5em]"
+                  placeholder="Enter 6-digit code"
+                  className="text-center text-2xl tracking-[0.35em]"
+                  aria-describedby="otp-hint"
                 />
+                <p id="otp-hint" className="text-[11px] text-muted-foreground">
+                  The code is never shown in this app for security.
+                </p>
               </div>
               {otpState?.error && (
                 <Alert variant="error">{otpState.error}</Alert>
@@ -115,6 +129,15 @@ export function ForgotForm() {
                 {otpPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Verify code
               </Button>
+              <button
+                type="button"
+                className="w-full text-center text-xs font-medium text-muted-foreground hover:text-primary"
+                onClick={() => {
+                  setStage("request");
+                }}
+              >
+                Use a different email
+              </button>
             </form>
           )}
 
