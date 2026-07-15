@@ -243,3 +243,122 @@ export async function refreshCampaignCounters(campaignId: number): Promise<void>
 function escapeBasic(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+/**
+ * Send a one-recipient TEST of a campaign's template via the live SMTP pool.
+ *
+ * Safety guarantees (does not break bulk campaigns):
+ * - Does NOT change campaign status / counters
+ * - Does NOT burn the recipient in the sent_emails dedup ledger
+ *   (stores a synthetic emailNorm under __test__… so real addresses stay sendable)
+ * - Subject is prefixed with [TEST] so inbox is obvious
+ */
+export async function sendTestCampaignEmail(opts: {
+  campaignId: number;
+  to: string;
+  firstName?: string;
+  company?: string;
+}): Promise<{ ok: true; subject: string; to: string } | { ok: false; error: string }> {
+  const to = opts.to.trim().toLowerCase();
+  if (!to || !to.includes("@") || to.length < 5) {
+    return { ok: false, error: "Enter a valid email address to test." };
+  }
+
+  const campaign = await db
+    .select()
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, opts.campaignId))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!campaign) return { ok: false, error: "Campaign not found." };
+  if (!campaign.templateId) return { ok: false, error: "This campaign has no template. Pick a template first." };
+
+  const template = await db
+    .select()
+    .from(schema.templates)
+    .where(eq(schema.templates.id, campaign.templateId))
+    .limit(1)
+    .then((r) => r[0]);
+  if (!template) return { ok: false, error: "Template not found." };
+
+  const smtpRow = await pickSmtp();
+  if (!smtpRow) {
+    return { ok: false, error: "No healthy SMTP available. Check Settings → Email infrastructure." };
+  }
+
+  const brand = await getPublicBrand();
+  const firstName =
+    (opts.firstName || "").trim() ||
+    to.split("@")[0]?.replace(/[._+]/g, " ").replace(/\d+/g, " ").trim() ||
+    "there";
+  const company = (opts.company || "").trim() || "Acme Labs";
+
+  const unsubscribeUrl = await createUnsubscribeUrl(to);
+  const mergeVars = {
+    firstName,
+    company,
+    email: to,
+    ctaUrl: template.ctaUrl,
+    unsubscribeUrl,
+    brandName: brand.brandName,
+    senderName: brand.senderName,
+    brandColor: brand.accentColor,
+    logoUrl: brand.logoUrl,
+  };
+
+  const subjectInner = interpolate(template.subject, mergeVars);
+  const subject = subjectInner.startsWith("[TEST]") ? subjectInner : `[TEST] ${subjectInner}`;
+  const htmlBody = interpolate(template.htmlBody, mergeVars);
+
+  // Synthetic dedup key — never equals a real recipient, so bulk sends stay intact.
+  const emailNorm = `__test__${campaign.id}_${Date.now()}_${Math.floor(Math.random() * 1e6)}@trishulhub.test`;
+
+  let sentRowId: number;
+  try {
+    const inserted = await db
+      .insert(schema.sentEmails)
+      .values({
+        leadId: null,
+        campaignId: null, // keep out of campaign counters / status machine
+        email: to,
+        emailNorm,
+        subject,
+        status: "processing",
+      })
+      .returning({ id: schema.sentEmails.id });
+    sentRowId = inserted[0]!.id;
+  } catch (err) {
+    console.error("[campaign] test-send insert failed:", err);
+    return { ok: false, error: "Could not create test send record. Try again." };
+  }
+
+  try {
+    const smtp = await resolveSmtp(smtpRow);
+    await sendCampaignEmail({
+      smtp: {
+        id: smtp.id,
+        fromName: smtp.fromName,
+        fromEmail: smtp.fromEmail,
+        transporter: smtp.transporter,
+      },
+      to,
+      subject,
+      html: htmlBody,
+      sentEmailId: sentRowId,
+      unsubscribeUrl,
+    });
+    await db
+      .update(schema.sentEmails)
+      .set({ status: "sent", smtpConfigId: smtpRow.id, sentAt: new Date() })
+      .where(eq(schema.sentEmails.id, sentRowId));
+    return { ok: true, subject, to };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await markFailure(smtpRow.id, errMsg);
+    await db
+      .update(schema.sentEmails)
+      .set({ status: "failed", errorMsg: errMsg.slice(0, 300) })
+      .where(eq(schema.sentEmails.id, sentRowId));
+    return { ok: false, error: `Test send failed: ${errMsg.slice(0, 200)}` };
+  }
+}
