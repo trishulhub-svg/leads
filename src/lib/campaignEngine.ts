@@ -10,6 +10,7 @@ import { db, schema } from "./db";
 import { pickSmtp, resolveSmtp, markFailure } from "./smtpLoadBalancer";
 import { sendCampaignEmail, interpolate } from "./email";
 import { createUnsubscribeUrl } from "./unsubscribe";
+import { getPublicBrand } from "./brand";
 
 export type SendOutcome = {
   processed: number;
@@ -117,6 +118,7 @@ export async function drainCampaign(campaignId: number, opts: { maxJobs?: number
   const template = campaign.templateId
     ? await db.select().from(schema.templates).where(eq(schema.templates.id, campaign.templateId)).limit(1).then((r) => r[0])
     : null;
+  const brand = await getPublicBrand();
 
   for (let i = 0; i < maxJobs; i++) {
     if (Date.now() > deadline) return { ...out, stoppedReason: "timeout" };
@@ -159,22 +161,19 @@ export async function drainCampaign(campaignId: number, opts: { maxJobs?: number
       : null;
 
     const unsubscribeUrl = await createUnsubscribeUrl(next.email);
-    const htmlBody = template
-      ? interpolate(template.htmlBody, {
-          firstName: lead?.firstName,
-          company: lead?.company,
-          email: next.email,
-          ctaUrl: template.ctaUrl,
-          unsubscribeUrl,
-        })
-      : `<p>${escapeBasic(next.email)}</p>`;
-    const subject = template
-      ? interpolate(template.subject, {
-          firstName: lead?.firstName,
-          company: lead?.company,
-          email: next.email,
-        })
-      : next.subject;
+    const mergeVars = {
+      firstName: lead?.firstName,
+      company: lead?.company,
+      email: next.email,
+      ctaUrl: template?.ctaUrl,
+      unsubscribeUrl,
+      brandName: brand.brandName,
+      senderName: brand.senderName,
+      brandColor: brand.accentColor,
+      logoUrl: brand.logoUrl,
+    };
+    const htmlBody = template ? interpolate(template.htmlBody, mergeVars) : `<p>${escapeBasic(next.email)}</p>`;
+    const subject = template ? interpolate(template.subject, mergeVars) : next.subject;
 
     try {
       const smtp = await resolveSmtp(smtpRow);

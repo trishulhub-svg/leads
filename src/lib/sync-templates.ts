@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import { defaultTemplates } from "./default-templates";
 
-const SYNC_FLAG = "templates_professional_v1";
+const SYNC_FLAG = "templates_brand_neutral_v2";
 
 /** Upsert the four canonical Trishulhub templates once (or whenever legacy). */
 export async function syncDefaultTemplates(): Promise<void> {
@@ -29,7 +29,10 @@ export async function syncDefaultTemplates(): Promise<void> {
       continue;
     }
 
-    const legacy = !exists.htmlBody.includes("{{unsubscribe_url}}");
+    const legacy =
+      !exists.htmlBody.includes("{{unsubscribe_url}}") ||
+      !exists.htmlBody.includes("{{brand_name}}") ||
+      exists.htmlBody.includes("Trishulhub");
     if (force || legacy) {
       await db
         .update(schema.templates)
