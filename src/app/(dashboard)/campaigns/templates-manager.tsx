@@ -41,25 +41,52 @@ const VARIABLES = [
   { token: "{{first_name}}", label: "First name" },
   { token: "{{company}}", label: "Company" },
   { token: "{{email}}", label: "Email" },
+  { token: "{{cta_url}}", label: "CTA URL" },
+  { token: "{{unsubscribe_url}}", label: "Unsubscribe URL" },
 ];
 
-const SAMPLE = { first_name: "Aarav", company: "Acme Labs", email: "aarav@acmelabs.com" };
+const SAMPLE = {
+  first_name: "Aarav",
+  company: "Acme Labs",
+  email: "aarav@acmelabs.com",
+  cta_url: "https://trishulhub.com",
+  unsubscribe_url: "https://example.com/unsubscribe",
+};
 
-const BLANK_BODY = `<div style="max-width:560px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1f2937;line-height:1.6">
-  <p>Hi {{first_name}},</p>
-  <p>I wanted to reach out to {{company}} because…</p>
-  <p style="margin:28px 0">
-    <a href="https://your-link.com" style="display:inline-block;padding:12px 28px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Book a call</a>
-  </p>
-  <p>Best,<br/>Your name</p>
-</div>`;
+const BLANK_BODY = `<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#f4f6f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+        <tr><td style="background:#0f172a;padding:20px 28px;">
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;color:#93c5fd;font-weight:700;">Trishulhub</p>
+        </td></tr>
+        <tr><td style="padding:28px;font-family:Arial,Helvetica,sans-serif;color:#1f2937;font-size:15px;line-height:1.65;">
+          <p>Hi {{first_name}},</p>
+          <p>I wanted to reach out to {{company}} with a short note.</p>
+          <p style="margin:28px 0">
+            <a href="{{cta_url}}" style="display:inline-block;padding:13px 28px;background:#1d4ed8;color:#fff;border-radius:8px;text-decoration:none;font-weight:700;">Book a call</a>
+          </p>
+          <p>Warm regards,<br/><strong>Trishulhub Team</strong></p>
+        </td></tr>
+        <tr><td style="padding:20px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
+          <a href="{{unsubscribe_url}}" style="display:inline-block;padding:10px 18px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:12px;font-weight:600;color:#334155;text-decoration:none;">Unsubscribe</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
 function renderPreview(html: string): string {
   return html
     .replace(/\{\{\s*first_name\s*\}\}/gi, SAMPLE.first_name)
     .replace(/\{\{\s*last_name\s*\}\}/gi, "")
     .replace(/\{\{\s*company\s*\}\}/gi, SAMPLE.company)
-    .replace(/\{\{\s*email\s*\}\}/gi, SAMPLE.email);
+    .replace(/\{\{\s*email\s*\}\}/gi, SAMPLE.email)
+    .replace(/\{\{\s*cta_url\s*\}\}/gi, SAMPLE.cta_url)
+    .replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, SAMPLE.unsubscribe_url);
 }
 
 function toDraft(t: EmailTemplate): Draft {
@@ -360,8 +387,11 @@ export function TemplatesManager({
               />
               <p className="text-[11px] text-muted-foreground">
                 Use <code className="rounded bg-muted px-1">{"{{first_name}}"}</code>,{" "}
-                <code className="rounded bg-muted px-1">{"{{company}}"}</code> and{" "}
-                <code className="rounded bg-muted px-1">{"{{email}}"}</code> — they’re replaced per recipient at send time.
+                <code className="rounded bg-muted px-1">{"{{company}}"}</code>,{" "}
+                <code className="rounded bg-muted px-1">{"{{cta_url}}"}</code> and{" "}
+                <code className="rounded bg-muted px-1">{"{{unsubscribe_url}}"}</code> —
+                filled per recipient at send time. Always include an Unsubscribe button with{" "}
+                <code className="rounded bg-muted px-1">{"{{unsubscribe_url}}"}</code>.
               </p>
             </div>
           </div>
@@ -394,5 +424,11 @@ export function TemplatesManager({
 }
 
 function blankDraft(): Draft {
-  return { name: "", subject: "", htmlBody: BLANK_BODY, ctaType: "landing", ctaUrl: "" };
+  return {
+    name: "",
+    subject: "",
+    htmlBody: BLANK_BODY,
+    ctaType: "landing",
+    ctaUrl: "https://trishulhub.com",
+  };
 }

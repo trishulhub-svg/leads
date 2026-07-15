@@ -42,7 +42,8 @@ type ImportReport = {
   total: number;
 };
 
-const SUPPORT_EMAIL = "team@trishulhub.com";
+const WHATSAPP_SUPPORT =
+  "https://wa.me/919662106793?text=" + encodeURIComponent("Hi trishulhub team");
 
 export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
   const [leads, setLeads] = React.useState<Lead[]>(initialLeads);
@@ -207,7 +208,9 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
               Upgrade to unlock
             </Button>
             <a
-              href={`mailto:${SUPPORT_EMAIL}?subject=Upgrade%20to%20Trishulhub%20Premium`}
+              href={WHATSAPP_SUPPORT}
+              target="_blank"
+              rel="noreferrer"
               className="text-center text-xs font-medium text-primary underline-offset-2 hover:underline sm:text-right"
             >
               Contact the Trishulhub team for more →

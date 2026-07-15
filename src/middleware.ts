@@ -6,7 +6,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 
-const PUBLIC_PAGES = ["/login", "/forgot-password", "/reset-password"];
+const PUBLIC_PAGES = ["/login", "/forgot-password", "/reset-password", "/unsubscribe"];
 const COOKIE = "tl_session";
 
 async function isAuthenticated(token?: string): Promise<boolean> {

@@ -4,10 +4,13 @@ import { db, schema } from "@/lib/db";
 import { CampaignsView } from "./campaigns-view";
 import { PageHeader } from "@/components/page-header";
 import { Send } from "lucide-react";
+import { syncDefaultTemplates } from "@/lib/sync-templates";
 
 export const dynamic = "force-dynamic";
 
 export default async function CampaignsPage() {
+  await syncDefaultTemplates();
+
   const [campaigns, templates, rawCountRow] = await Promise.all([
     db.select().from(schema.campaigns).orderBy(desc(schema.campaigns.createdAt)),
     db.select().from(schema.templates).orderBy(schema.templates.id),

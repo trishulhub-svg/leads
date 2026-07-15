@@ -35,14 +35,28 @@ export async function sendOwnerEmail({
   }
 }
 
-/** Interpolate {{first_name}}, {{company}}, {{first_name}} etc. into a template body. */
-export function interpolate(html: string, vars: { firstName?: string | null; company?: string | null; email?: string | null }): string {
+export type TemplateVars = {
+  firstName?: string | null;
+  company?: string | null;
+  email?: string | null;
+  /** Absolute URL — not HTML-escaped beyond attribute-safe encoding. */
+  ctaUrl?: string | null;
+  /** Absolute unsubscribe URL. */
+  unsubscribeUrl?: string | null;
+};
+
+/** Interpolate merge tags into a template subject or HTML body. */
+export function interpolate(html: string, vars: TemplateVars): string {
   const first = vars.firstName || there(vars.email);
+  const cta = vars.ctaUrl || "#";
+  const unsub = vars.unsubscribeUrl || "#";
   return html
     .replace(/\{\{\s*first_name\s*\}\}/gi, escapeHtml(first))
     .replace(/\{\{\s*last_name\s*\}\}/gi, "")
-    .replace(/\{\{\s*company\s*\}\}/gi, escapeHtml(vars.company || ""))
-    .replace(/\{\{\s*email\s*\}\}/gi, escapeHtml(vars.email || ""));
+    .replace(/\{\{\s*company\s*\}\}/gi, escapeHtml(vars.company || "your team"))
+    .replace(/\{\{\s*email\s*\}\}/gi, escapeHtml(vars.email || ""))
+    .replace(/\{\{\s*cta_url\s*\}\}/gi, escapeAttr(cta))
+    .replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, escapeAttr(unsub));
 }
 
 function there(email?: string | null): string {
@@ -59,6 +73,10 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 /**
  * Send a single campaign email. Returns the smtpId used.
  * The caller is responsible for picking the SMTP + recording the sent_email row.
@@ -69,27 +87,39 @@ export async function sendCampaignEmail({
   subject,
   html,
   sentEmailId,
+  unsubscribeUrl,
 }: {
   smtp: { id: number; fromName: string; fromEmail: string; transporter: import("nodemailer").Transporter };
   to: string;
   subject: string;
   html: string;
   sentEmailId: number;
+  unsubscribeUrl?: string | null;
 }): Promise<number> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   // Open-tracking pixel (best-effort; many clients block images).
   const pixel = baseUrl
     ? `<img src="${baseUrl}/api/track/open/${sentEmailId}" width="1" height="1" alt="" style="display:none" />`
     : "";
+
+  const headers: Record<string, string> = {
+    "X-Sent-By": "trishulhub-leads",
+    "X-Sent-Email-Id": String(sentEmailId),
+  };
+  if (unsubscribeUrl && unsubscribeUrl !== "#") {
+    const apiUnsub = unsubscribeUrl.includes("/unsubscribe?")
+      ? unsubscribeUrl.replace("/unsubscribe?", "/api/unsubscribe?")
+      : unsubscribeUrl;
+    headers["List-Unsubscribe"] = `<${apiUnsub}>`;
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
   await smtp.transporter.sendMail({
     from: `"${smtp.fromName}" <${smtp.fromEmail}>`,
     to,
     subject,
     html: html + pixel,
-    headers: {
-      "X-Sent-By": "trishulhub-leads",
-      "X-Sent-Email-Id": String(sentEmailId),
-    },
+    headers,
   });
   await markSent(smtp.id);
   return smtp.id;
@@ -106,4 +136,3 @@ export async function transporterForConfigId(configId: number) {
   if (!row) throw new Error("SMTP config not found");
   return buildTransporter(row);
 }
-
