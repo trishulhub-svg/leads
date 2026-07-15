@@ -256,11 +256,49 @@ export function CrmView({
 
   if (entries.length === 0) {
     return (
-      <EmptyState
-        icon={MessageSquare}
-        title="No conversations yet"
-        description="Qualified leads will appear here automatically when they reply to your campaigns."
-      />
+      <div className="space-y-4">
+        {advanced ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InsightChip label="Win rate" value="—" detail="Waiting for outcomes" />
+            <InsightChip label="Open pipeline" value={formatMoney(0)} detail="0 active" />
+            <InsightChip label="Follow-ups due" value="0" detail="All clear" />
+            <InsightChip label="Avg. days to close" value="—" detail="Won deals" />
+          </div>
+        ) : (
+          <PremiumGate
+            compact
+            title="Pipeline intelligence"
+            description="Unlock win-rate analytics, deal value tracking, follow-up reminders, reply timelines, bulk actions, and CSV export."
+          />
+        )}
+
+        <div className="rounded-xl border bg-card/80 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">Advanced CRM</Badge>
+            {advanced ? (
+              <Badge variant="success" className="gap-1">
+                <Sparkles className="h-3 w-3" /> Premium active
+              </Badge>
+            ) : (
+              <>
+                <PremiumChip label="Follow-ups" />
+                <PremiumChip label="Deal value" />
+                <PremiumChip label="Reply timeline" />
+                <PremiumChip label="Export" />
+              </>
+            )}
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your reply pipeline is ready. The moment a prospect answers a campaign, they land here as an opportunity.
+          </p>
+        </div>
+
+        <EmptyState
+          icon={MessageSquare}
+          title="No conversations yet"
+          description="Send a campaign, wait for replies, then manage follow-ups, deal value, and outcomes from this board."
+        />
+      </div>
     );
   }
 
