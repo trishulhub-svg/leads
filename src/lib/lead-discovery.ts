@@ -63,7 +63,12 @@ export async function discoverLocalLeads(input: {
   if (category.length < 2) throw new Error("Enter the type of business you want to find.");
 
   const point = await geocodeIndia(location);
-  const elements = await searchOpenStreetMap(point.latitude, point.longitude, radiusKm);
+  const elements = await searchOpenStreetMap(
+    point.latitude,
+    point.longitude,
+    radiusKm,
+    category
+  );
   const candidates = uniqueBusinesses(elements, point.latitude, point.longitude, category);
 
   let rankings = new Map<string, { relevant: boolean; reason: string }>();
@@ -145,19 +150,19 @@ async function geocodeIndia(query: string): Promise<{ label: string; latitude: n
 async function searchOpenStreetMap(
   latitude: number,
   longitude: number,
-  radiusKm: number
+  radiusKm: number,
+  category: string
 ): Promise<OverpassElement[]> {
-  const cacheKey = `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${radiusKm}`;
+  const categoryPattern = buildCategoryPattern(category);
+  const cacheKey = `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${radiusKm}:${categoryPattern}`;
   const cached = readCache(overpassCache, cacheKey);
   if (cached) return cached;
 
   const radius = radiusKm * 1000;
+  const selectors = buildOverpassSelectors(radius, latitude, longitude, categoryPattern);
   const query = `[out:json][timeout:20];
 (
-  nwr(around:${radius},${latitude},${longitude})["name"]["website"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["contact:website"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["email"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["contact:email"];
+${selectors.map((selector) => `  ${selector}`).join("\n")}
 );
 out center 160;`;
   const errors: string[] = [];
@@ -226,6 +231,61 @@ function writeCache<K, V>(
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildCategoryPattern(category: string): string {
+  const words = category
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 1)
+    .slice(0, 6);
+  const aliases: Record<string, string[]> = {
+    agencies: ["agency"],
+    agency: ["agencies"],
+    dental: ["dentist"],
+    dentist: ["dental"],
+    doctor: ["doctors", "physician"],
+    doctors: ["doctor", "physician"],
+    gym: ["fitness", "fitness_centre"],
+    hotel: ["guest_house", "hostel"],
+    lawyer: ["legal", "solicitor"],
+    marketing: ["advertising", "agency"],
+    property: ["estate_agent", "real_estate"],
+    restaurant: ["food", "cafe"],
+    salon: ["beauty", "hairdresser"],
+    school: ["education", "college", "training"],
+    software: ["technology", "it"],
+  };
+  const expanded = new Set(words);
+  for (const word of words) {
+    for (const alias of aliases[word] || []) expanded.add(alias);
+  }
+  // User input is embedded in an Overpass regex, so escape every token.
+  return Array.from(expanded)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+}
+
+function buildOverpassSelectors(
+  radius: number,
+  latitude: number,
+  longitude: number,
+  categoryPattern: string
+): string[] {
+  const around = `(around:${radius},${latitude},${longitude})`;
+  const contactTags = ["website", "contact:website", "email", "contact:email"];
+  const categoryTags = ["amenity", "shop", "office", "craft", "tourism", "healthcare"];
+  const selectors: string[] = [];
+
+  for (const contactTag of contactTags) {
+    selectors.push(`nwr${around}["name"~"${categoryPattern}",i]["${contactTag}"];`);
+    for (const categoryTag of categoryTags) {
+      selectors.push(
+        `nwr${around}["${categoryTag}"~"${categoryPattern}",i]["${contactTag}"];`
+      );
+    }
+  }
+  return selectors;
 }
 
 function uniqueBusinesses(
