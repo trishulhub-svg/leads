@@ -248,6 +248,12 @@ function SmtpList({
   );
 }
 
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}k`;
+  return n.toLocaleString();
+}
+
 function QuotaBar({
   label,
   used,
@@ -262,11 +268,16 @@ function QuotaBar({
   const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
   const tone = left <= 0 ? "bg-destructive" : pct >= 85 ? "bg-amber-500" : "bg-primary";
   return (
-    <div className="min-w-[9rem] flex-1">
-      <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
-        <span className="font-medium text-muted-foreground">{label}</span>
-        <span className="tabular-nums text-foreground">
-          {left.toLocaleString()} left · {used.toLocaleString()}/{total.toLocaleString()}
+    <div className="min-w-0 w-full">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
+        <span className="shrink-0 font-medium text-muted-foreground">{label}</span>
+        <span className="min-w-0 truncate text-right tabular-nums text-foreground" title={`${left.toLocaleString()} left · ${used.toLocaleString()}/${total.toLocaleString()}`}>
+          <span className="font-semibold">{formatCount(left)}</span>
+          <span className="text-muted-foreground"> left</span>
+          <span className="text-muted-foreground"> · </span>
+          <span>
+            {formatCount(used)}/{formatCount(total)}
+          </span>
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -291,8 +302,8 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
       });
       const data = await res.json();
       setTestResult({ ok: data.ok, msg: data.ok ? data.message : data.error });
-    } catch (err: any) {
-      setTestResult({ ok: false, msg: err?.message ?? "Test failed" });
+    } catch (err: unknown) {
+      setTestResult({ ok: false, msg: err instanceof Error ? err.message : "Test failed" });
     }
     setTesting(false);
   }
@@ -300,10 +311,10 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
   return (
     <Card className="transition-all duration-200 hover:border-primary/20 hover:shadow-md">
       <CardContent className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="font-medium">{row.label}</span>
+              <span className="max-w-full truncate font-medium">{row.label}</span>
               {row.healthy ? (
                 <Badge variant="success" className="gap-1">
                   <CheckCircle2 className="h-3 w-3" /> Healthy
@@ -314,23 +325,27 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
                 </Badge>
               )}
             </div>
-            <p className="truncate text-sm text-muted-foreground">
+            <p className="break-all text-sm text-muted-foreground sm:truncate">
               {row.user}@{row.host}:{row.port} · {row.fromName} &lt;{row.fromEmail}&gt;
             </p>
-            <div className="flex flex-wrap gap-3 rounded-xl border bg-muted/20 p-3">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Gauge className="h-3.5 w-3.5" /> Quota
+
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Gauge className="h-3.5 w-3.5 shrink-0" /> Quota remaining
               </div>
-              <QuotaBar label="Today" used={row.sentToday} total={row.dailyLimit} left={Math.max(0, row.dailyLimit - row.sentToday)} />
-              <QuotaBar label="This month" used={row.sentThisMonth} total={row.monthlyQuota} left={row.monthlyLeft} />
-              {row.totalQuota != null && row.totalLeft != null && (
-                <QuotaBar label="Total" used={row.sentTotal} total={row.totalQuota} left={row.totalLeft} />
-              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <QuotaBar label="Today" used={row.sentToday} total={row.dailyLimit} left={Math.max(0, row.dailyLimit - row.sentToday)} />
+                <QuotaBar label="This month" used={row.sentThisMonth} total={row.monthlyQuota} left={row.monthlyLeft} />
+                {row.totalQuota != null && row.totalLeft != null && (
+                  <QuotaBar label="Total" used={row.sentTotal} total={row.totalQuota} left={row.totalLeft} />
+                )}
+              </div>
             </div>
-            {row.imapHost && <p className="text-xs text-muted-foreground">IMAP: {row.imapHost}</p>}
+
+            {row.imapHost && <p className="truncate text-xs text-muted-foreground">IMAP: {row.imapHost}</p>}
             {row.lastError && (
-              <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                <ShieldAlert className="h-3 w-3" /> {row.lastError}
+              <p className="flex items-start gap-1 break-words text-xs text-amber-600 dark:text-amber-400">
+                <ShieldAlert className="mt-0.5 h-3 w-3 shrink-0" /> {row.lastError}
               </p>
             )}
             {testResult && (
@@ -339,15 +354,22 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
               </Alert>
             )}
           </div>
-          <div className="flex shrink-0 gap-1">
-            <Button size="sm" variant="outline" onClick={test} disabled={testing}>
+
+          <div className="flex w-full shrink-0 gap-1 sm:w-auto sm:flex-col">
+            <Button size="sm" variant="outline" className="min-h-9 flex-1 sm:flex-none" onClick={test} disabled={testing}>
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
               Test
             </Button>
-            <Button size="sm" variant="ghost" onClick={onEdit}>
+            <Button size="sm" variant="ghost" className="min-h-9 flex-1 sm:flex-none" onClick={onEdit}>
               Edit
             </Button>
-            <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive" aria-label={`Delete ${row.label}`}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDelete}
+              className="min-h-9 flex-1 text-destructive hover:text-destructive sm:flex-none"
+              aria-label={`Delete ${row.label}`}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
