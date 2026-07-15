@@ -32,7 +32,7 @@ const PAGE_META: Record<string, { label: string; context: string }> = {
   "/": { label: "Dashboard", context: "Performance overview" },
   "/leads": { label: "Leads", context: "Discover and qualify" },
   "/campaigns": { label: "Campaigns", context: "Outreach operations" },
-  "/crm": { label: "CRM", context: "Reply pipeline" },
+  "/crm": { label: "CRM", context: "Advanced reply pipeline" },
   "/settings": { label: "Settings", context: "Workspace controls" },
 };
 
