@@ -1,7 +1,7 @@
 // src/app/(dashboard)/campaigns/campaigns-view.tsx
 "use client";
 import * as React from "react";
-import { Send, Plus, Loader2, Mail, Eye, MessageSquare, Megaphone, Users } from "lucide-react";
+import { Send, Plus, Loader2, Mail, Eye, MessageSquare, Megaphone, Users, LayoutList, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { Select } from "@/components/ui/select";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
+import { TemplatesManager, type EmailTemplate } from "./templates-manager";
 
 type Campaign = {
   id: number;
@@ -26,16 +27,11 @@ type Campaign = {
   createdAt: string;
 };
 
-type Template = {
-  id: number;
-  name: string;
-  subject: string;
-  ctaType: string;
-};
+type Template = EmailTemplate;
 
 export function CampaignsView({
   initialCampaigns,
-  templates,
+  templates: initialTemplates,
   leadCount,
 }: {
   initialCampaigns: Campaign[];
@@ -43,6 +39,8 @@ export function CampaignsView({
   leadCount: number;
 }) {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
+  const [templates, setTemplates] = React.useState<Template[]>(initialTemplates);
+  const [tab, setTab] = React.useState<"campaigns" | "templates">("campaigns");
   const [showCreate, setShowCreate] = React.useState(false);
   const [sending, setSending] = React.useState<number | null>(null);
   const [result, setResult] = React.useState<{ ok: boolean; msg: string } | null>(null);
@@ -51,6 +49,12 @@ export function CampaignsView({
     const res = await fetch("/api/campaigns");
     const data = await res.json();
     setCampaigns(data.campaigns || []);
+  }
+
+  async function refreshTemplates() {
+    const res = await fetch("/api/templates");
+    const data = await res.json();
+    setTemplates(data.templates || []);
   }
 
   async function sendCampaign(id: number) {
@@ -81,6 +85,29 @@ export function CampaignsView({
 
   return (
     <div className="space-y-4">
+      <div className="inline-flex rounded-xl border bg-muted/30 p-1">
+        <Button
+          size="sm"
+          variant={tab === "campaigns" ? "default" : "ghost"}
+          onClick={() => setTab("campaigns")}
+          aria-pressed={tab === "campaigns"}
+        >
+          <LayoutList className="h-4 w-4" /> Campaigns
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === "templates" ? "default" : "ghost"}
+          onClick={() => setTab("templates")}
+          aria-pressed={tab === "templates"}
+        >
+          <FileText className="h-4 w-4" /> Email templates
+        </Button>
+      </div>
+
+      {tab === "templates" ? (
+        <TemplatesManager initialTemplates={templates} onChanged={refreshTemplates} />
+      ) : (
+        <div className="space-y-4">
       {result && (
         <Alert variant={result.ok ? "success" : "error"}>{result.msg}</Alert>
       )}
@@ -90,9 +117,13 @@ export function CampaignsView({
           <span className="flex items-center gap-2 text-muted-foreground">
             <Users className="h-4 w-4 text-primary" /> <strong className="text-foreground">{leadCount}</strong> leads ready
           </span>
-          <span className="flex items-center gap-2 text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setTab("templates")}
+            className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-primary"
+          >
             <Mail className="h-4 w-4 text-violet-500" /> <strong className="text-foreground">{templates.length}</strong> templates
-          </span>
+          </button>
         </div>
         <Button onClick={() => setShowCreate((s) => !s)}>
           <Plus className="h-4 w-4" /> New Campaign
@@ -164,6 +195,8 @@ export function CampaignsView({
               </Card>
             );
           })}
+        </div>
+      )}
         </div>
       )}
     </div>

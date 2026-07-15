@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import { LeadsView } from "./leads-view";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { Database, ShieldOff, Sparkles, Users } from "lucide-react";
+import { Database, ShieldOff, Upload, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +29,9 @@ export default async function LeadsPage() {
     <div className="space-y-7">
       <PageHeader
         eyebrow="Lead intelligence"
-        icon={Sparkles}
+        icon={Upload}
         title="Build your prospect universe"
-        description="Discover verified businesses, import contacts, and keep your outreach pool clean and ready."
+        description="Import your contact lists, keep them clean and de-duplicated, and keep your outreach pool ready."
       />
 
       <div className="grid gap-3 sm:grid-cols-3">

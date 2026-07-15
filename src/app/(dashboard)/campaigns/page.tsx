@@ -24,16 +24,29 @@ export default async function CampaignsPage() {
     updatedAt: c.updatedAt.toISOString(),
   }));
 
+  const safeTemplates = templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    subject: t.subject,
+    htmlBody: t.htmlBody,
+    ctaType: t.ctaType,
+    ctaUrl: t.ctaUrl,
+  }));
+
   return (
     <div className="space-y-7">
       <PageHeader
         eyebrow="Outreach operations"
         icon={Send}
         title="Campaign control room"
-        description="Build focused outreach, distribute delivery safely across your SMTP pool, and track every response."
+        description="Build focused outreach, craft your email templates, and track every response."
       />
 
-      <CampaignsView initialCampaigns={safeCampaigns} templates={templates} leadCount={rawCountRow[0]?.count ?? 0} />
+      <CampaignsView
+        initialCampaigns={safeCampaigns}
+        templates={safeTemplates}
+        leadCount={rawCountRow[0]?.count ?? 0}
+      />
     </div>
   );
 }
