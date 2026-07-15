@@ -7,11 +7,14 @@ import { getPublicAiConfig } from "@/lib/ai";
 import { PageHeader } from "@/components/page-header";
 import { PremiumGate } from "@/components/premium-gate";
 import { getPlanLimits } from "@/lib/plan";
+import { ensureSmtpQuotaColumns } from "@/lib/ensure-smtp-quota-columns";
 import { Bot, LockKeyhole, Mail, SlidersHorizontal } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  await ensureSmtpQuotaColumns();
+
   const [smtpRows, user, aiConfig, plan] = await Promise.all([
     db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id),
     db.select().from(schema.users).limit(1).then((r) => r[0]),

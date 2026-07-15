@@ -11,8 +11,8 @@ import { Select } from "@/components/ui/select";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { PremiumGate, PremiumChip } from "@/components/premium-gate";
-import type { PlanLimits } from "@/lib/plan";
-import { UPGRADE_WHATSAPP } from "@/lib/plan";
+import type { PlanLimits } from "@/lib/plan-constants";
+import { UPGRADE_WHATSAPP } from "@/lib/plan-constants";
 
 type SmtpRow = {
   id: number;

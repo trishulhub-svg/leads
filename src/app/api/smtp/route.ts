@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { SMTP_ROLES } from "@/drizzle/schema";
 import { getPlanLimits, smtpCapForRole } from "@/lib/plan";
+import { ensureSmtpQuotaColumns } from "@/lib/ensure-smtp-quota-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ function serialize(r: typeof schema.smtpConfigs.$inferSelect) {
 /** List all SMTP configs (passwords never exposed). */
 export async function GET() {
   if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await ensureSmtpQuotaColumns();
   const [rows, limits] = await Promise.all([
     db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id),
     getPlanLimits(),
@@ -56,6 +58,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await ensureSmtpQuotaColumns();
 
   const body = await req.json();
   const {

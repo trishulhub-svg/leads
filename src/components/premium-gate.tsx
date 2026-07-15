@@ -4,7 +4,7 @@ import { Lock, Sparkles } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { UPGRADE_WHATSAPP } from "@/lib/plan";
+import { UPGRADE_WHATSAPP } from "@/lib/plan-constants";
 
 export function PremiumGate({
   title,
