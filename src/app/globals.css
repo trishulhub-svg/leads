@@ -107,6 +107,20 @@
   textarea {
     -webkit-tap-highlight-color: transparent;
   }
+  /* Stable mobile canvas — no accidental horizontal scroll / rubber-band layout shift */
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+  /* Comfortable touch targets on phones without bloating desktop */
+  @media (max-width: 640px) {
+    button:not([data-compact]),
+    a[role="button"] {
+      min-height: 2.5rem;
+    }
+  }
 }
 
 @layer utilities {

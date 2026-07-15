@@ -11,6 +11,16 @@ import { checkRateLimit, clearRateLimit } from "./rate-limiter";
 
 const COOKIE = "tl_session";
 
+function cookieOptions(maxAge?: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    ...(maxAge !== undefined ? { maxAge } : {}),
+  };
+}
+
 function getSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
   if (!s || s.trim().length < 32) {
@@ -153,13 +163,7 @@ export async function login(
     console.error("[auth] sign error:", err);
     return { ok: false, error: "Server error. Please try again." };
   }
-  store.set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  });
+  store.set(COOKIE, token, cookieOptions(60 * 60 * 24));
   return { ok: true };
 }
 
@@ -177,9 +181,11 @@ export async function logout(): Promise<void> {
         await db.update(schema.sessions).set({ revokedAt: new Date() }).where(eq(schema.sessions.id, sid));
       }
     } catch {
-      // invalid token — just delete cookie
+      // invalid token — just clear cookie
     }
   }
+  // Must mirror the same path/secure/sameSite used when setting, or browsers keep the cookie.
+  store.set(COOKIE, "", { ...cookieOptions(0), expires: new Date(0) });
   store.delete(COOKIE);
 }
 

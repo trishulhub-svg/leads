@@ -10,7 +10,7 @@ import { loginAction } from "@/server/auth-actions";
 import { AuthShell } from "@/components/auth-shell";
 import { Alert } from "@/components/ui/alert";
 
-export function LoginForm() {
+export function LoginForm({ redirectTo = "/" }: { redirectTo?: string }) {
   const [state, formAction, pending] = useActionState(loginAction, null);
 
   return (
@@ -20,6 +20,7 @@ export function LoginForm() {
       footer={<p className="text-xs text-muted-foreground">Secure single-owner access</p>}
     >
           <form action={formAction} className="space-y-4">
+            <input type="hidden" name="redirect" value={redirectTo} />
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
