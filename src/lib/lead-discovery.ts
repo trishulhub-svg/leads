@@ -249,7 +249,7 @@ function buildCategoryPattern(category: string): string {
     gym: ["fitness", "fitness_centre"],
     hotel: ["guest_house", "hostel"],
     lawyer: ["legal", "solicitor"],
-    marketing: ["advertising", "agency"],
+    marketing: ["advertising", "agency", "advertising_agency", "marketing_agency"],
     property: ["estate_agent", "real_estate"],
     restaurant: ["food", "cafe"],
     salon: ["beauty", "hairdresser"],
@@ -257,13 +257,16 @@ function buildCategoryPattern(category: string): string {
     software: ["technology", "it"],
   };
   const expanded = new Set(words);
+  if (words.length > 1) expanded.add(words.join("_"));
   for (const word of words) {
+    if (word.length > 3 && word.endsWith("s")) expanded.add(word.slice(0, -1));
     for (const alias of aliases[word] || []) expanded.add(alias);
   }
   // User input is embedded in an Overpass regex, so escape every token.
-  return Array.from(expanded)
-    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
+  const values = Array.from(expanded).map((word) =>
+    word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  );
+  return `^(${values.join("|")})$`;
 }
 
 function buildOverpassSelectors(
@@ -273,11 +276,13 @@ function buildOverpassSelectors(
   categoryPattern: string
 ): string[] {
   const around = `(around:${radius},${latitude},${longitude})`;
-  const contactTags = ["website", "contact:website", "email", "contact:email"];
-  const categoryKeys = "^(name|amenity|shop|office|craft|tourism|healthcare)$";
-  return contactTags.map(
-    (contactTag) =>
-      `nwr${around}[~"${categoryKeys}"~"${categoryPattern}",i]["${contactTag}"];`
+  const categoryTags = ["amenity", "shop", "office", "craft", "tourism", "healthcare"];
+  // Business POIs are overwhelmingly mapped as nodes. Querying ways/relations
+  // with a radius is dramatically more expensive on public Overpass instances
+  // and caused repeated 504s even for small radii.
+  return categoryTags.map(
+    (categoryTag) =>
+      `node${around}["${categoryTag}"~"${categoryPattern}",i];`
   );
 }
 
