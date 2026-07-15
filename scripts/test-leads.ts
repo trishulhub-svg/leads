@@ -33,10 +33,10 @@ async function cleanLeads() {
 
   // Test 1: extractEmails finds mailto: + plain emails.
   const extracted = extractEmails(
-    `<a href="mailto:alice@Example.COM">x</a> contact bob@test.io please NO@example
+    `<a href="mailto:alice@ExampleCompany.COM">x</a> contact bob@test.io please NO@example
      docs: user@domain.com and person@example.com`
   );
-  assert(extracted.includes("alice@example.com"), "extractEmails decodes mailto: + normalizes case");
+  assert(extracted.includes("alice@examplecompany.com"), "extractEmails decodes mailto: + normalizes case");
   assert(extracted.includes("bob@test.io"), "extractEmails finds plain emails");
   assert(!extracted.includes("no@example"), "extractEmails rejects incomplete addresses");
   assert(!extracted.includes("user@domain.com"), "extractEmails rejects common placeholder addresses");
