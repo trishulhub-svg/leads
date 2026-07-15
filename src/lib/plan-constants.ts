@@ -14,6 +14,8 @@ export type PlanLimits = {
   maxTemplates: number;
   leadIntelligence: boolean;
   smartSmtpPool: boolean;
+  /** Follow-ups, priority, deal value, reply timeline, analytics, export. */
+  advancedCrm: boolean;
 };
 
 export const FREE_PLAN: PlanLimits = {
@@ -23,6 +25,7 @@ export const FREE_PLAN: PlanLimits = {
   maxTemplates: 1,
   leadIntelligence: false,
   smartSmtpPool: false,
+  advancedCrm: false,
 };
 
 export const PREMIUM_PLAN: PlanLimits = {
@@ -32,6 +35,7 @@ export const PREMIUM_PLAN: PlanLimits = {
   maxTemplates: 50,
   leadIntelligence: true,
   smartSmtpPool: true,
+  advancedCrm: true,
 };
 
 export function smtpCapForRole(limits: PlanLimits, role: "primary" | "emergency"): number {
