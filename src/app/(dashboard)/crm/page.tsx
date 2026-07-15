@@ -41,10 +41,10 @@ export default async function CrmPage() {
   return (
     <div className="space-y-7">
       <PageHeader
-        eyebrow="Reply pipeline"
+        eyebrow="Advanced reply pipeline"
         icon={KanbanSquare}
-        title="Turn replies into relationships"
-        description="Focus on prospects who answered, capture context, and move every opportunity toward a clear outcome."
+        title="CRM command center"
+        description="Move every reply through contacted → discussed → done. Premium adds follow-ups, deal value, analytics, and conversation history."
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard compact icon={MessageSquare} label="New conversations" value={contacted} detail="Awaiting discussion" />
