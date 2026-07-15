@@ -7,11 +7,12 @@ import {
   Trash2,
   Loader2,
   Inbox,
-  MapPin,
-  Sparkles,
-  Lock,
   FileSpreadsheet,
   Mail,
+  MapPin,
+  Building2,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
+import { PremiumGate } from "@/components/premium-gate";
+import type { PlanLimits } from "@/lib/plan";
 
 type Lead = {
   id: number;
@@ -42,10 +45,25 @@ type ImportReport = {
   total: number;
 };
 
-const WHATSAPP_SUPPORT =
-  "https://wa.me/919662106793?text=" + encodeURIComponent("Hi trishulhub team");
+type DiscoveredBusiness = {
+  id: string;
+  name: string;
+  category: string;
+  address: string;
+  distanceKm: number;
+  website: string | null;
+  phone: string | null;
+  emails: string[];
+  relevanceReason?: string;
+};
 
-export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
+export function LeadsView({
+  initialLeads,
+  plan,
+}: {
+  initialLeads: Lead[];
+  plan: PlanLimits;
+}) {
   const [leads, setLeads] = React.useState<Lead[]>(initialLeads);
   const [query, setQuery] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -54,6 +72,50 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
   const [importing, setImporting] = React.useState(false);
   const [importNiche, setImportNiche] = React.useState("");
   const searchController = React.useRef<AbortController | null>(null);
+  const [location, setLocation] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [radiusKm, setRadiusKm] = React.useState("10");
+  const [discovering, setDiscovering] = React.useState(false);
+  const [discovered, setDiscovered] = React.useState<DiscoveredBusiness[]>([]);
+  const [resolvedLocation, setResolvedLocation] = React.useState("");
+  const [aiUsed, setAiUsed] = React.useState(false);
+
+  async function discover() {
+    if (!location.trim() || !category.trim()) return;
+    setDiscovering(true);
+    setResult(null);
+    setDiscovered([]);
+    try {
+      const response = await fetch("/api/leads/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location,
+          category,
+          radiusKm: Number(radiusKm),
+          maxBusinesses: 20,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Lead discovery failed.");
+      const report = data.report as ImportReport;
+      setDiscovered(data.discovery.businesses || []);
+      setResolvedLocation(data.discovery.location?.label || location);
+      setAiUsed(Boolean(data.discovery.aiUsed));
+      setResult({
+        ok: true,
+        msg: `Scanned ${data.discovery.businessesScanned} businesses and ${data.discovery.websitesScanned} websites. Found ${data.emailsFound} emails and added ${report.added} new leads.${data.discovery.warning ? ` ${data.discovery.warning}` : ""}`,
+      });
+      await refresh();
+    } catch (error) {
+      setResult({
+        ok: false,
+        msg: error instanceof Error ? error.message : "Lead discovery failed.",
+      });
+    } finally {
+      setDiscovering(false);
+    }
+  }
 
   async function search(q: string) {
     setQuery(q);
@@ -179,45 +241,156 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
       {/* Result banner */}
       {result && <Alert variant={result.ok ? "success" : "error"}>{result.msg}</Alert>}
 
-      {/* Discover businesses — premium locked */}
-      <div className="relative overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20 p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-              <MapPin className="h-5 w-5" />
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
-                <Lock className="h-3 w-3" />
-              </span>
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Discover businesses near you</h2>
-                <Badge variant="warning" className="gap-1">
-                  <Sparkles className="h-3 w-3" /> Premium
-                </Badge>
+      {/* Discover businesses — free: upgrade gate · premium: live discovery */}
+      {!plan.leadIntelligence ? (
+        <PremiumGate
+          title="Discover businesses near you"
+          description="Find verified local businesses by location and category, then auto-collect their public emails — no list needed."
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-2xl border border-primary/20 bg-card/95 shadow-sm">
+            <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-br from-primary/[0.12] via-primary/[0.05] to-amber-500/[0.04] p-5 sm:p-6">
+              <div className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full bg-amber-400/10 blur-3xl" />
+              <div className="flex items-start gap-3">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-indigo-600 text-primary-foreground shadow-lg shadow-primary/20">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Discover businesses near you</h2>
+                    <Badge variant="warning" className="gap-1">
+                      <Sparkles className="h-3 w-3" /> Premium
+                    </Badge>
+                  </div>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    Choose a location, business type, and radius. We find verified map listings, scan public websites, and add emails to your pool.
+                  </p>
+                </div>
               </div>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Find verified local businesses by location and category, then auto-collect their public emails — no
-                list needed. Available on the premium plan.
-              </p>
+            </div>
+            <div className="p-5 sm:p-6">
+              <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_150px_auto]">
+                <div>
+                  <Label htmlFor="discovery-location" className="mb-1.5 text-xs">City, locality, or PIN code</Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="discovery-location"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Indiranagar, Bengaluru"
+                      className="pl-9"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") discover();
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="discovery-category" className="mb-1.5 text-xs">Business type</Label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="discovery-category"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      placeholder="e.g. dental clinics"
+                      className="pl-9"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") discover();
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="discovery-radius" className="mb-1.5 text-xs">Search radius</Label>
+                  <select
+                    id="discovery-radius"
+                    value={radiusKm}
+                    onChange={(e) => setRadiusKm(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {[2, 5, 10, 20, 30, 50].map((radius) => (
+                      <option key={radius} value={radius}>
+                        {radius} km
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    className="w-full md:w-auto"
+                    onClick={discover}
+                    disabled={discovering || !location.trim() || !category.trim()}
+                  >
+                    {discovering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    {discovering ? "Finding leads…" : "Find leads"}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-            <Button disabled className="cursor-not-allowed opacity-90" aria-disabled="true">
-              <Lock className="h-4 w-4" />
-              Upgrade to unlock
-            </Button>
-            <a
-              href={WHATSAPP_SUPPORT}
-              target="_blank"
-              rel="noreferrer"
-              className="text-center text-xs font-medium text-primary underline-offset-2 hover:underline sm:text-right"
-            >
-              Contact the Trishulhub team for more →
-            </a>
-          </div>
-        </div>
-      </div>
+
+          {discovered.length > 0 && (
+            <div className="overflow-hidden rounded-xl border bg-card/95 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Discovery results</h3>
+                  <p className="max-w-2xl truncate text-xs text-muted-foreground">{resolvedLocation}</p>
+                </div>
+                {aiUsed && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Sparkles className="h-3 w-3" /> Ranked by DeepSeek
+                  </Badge>
+                )}
+              </div>
+              <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+                {discovered.map((business) => (
+                  <div key={business.id} className="min-w-0 bg-card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{business.name}</p>
+                        <p className="mt-0.5 text-xs capitalize text-muted-foreground">
+                          {business.category} · {business.distanceKm} km
+                        </p>
+                      </div>
+                      {business.website && (
+                        <a
+                          href={business.website}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Open ${business.name} website`}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                    {business.address && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{business.address}</p>}
+                    <div className="mt-3">
+                      {business.emails.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {business.emails.slice(0, 3).map((email) => (
+                            <Badge key={email} variant="success" className="max-w-full truncate font-normal">
+                              {email}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No public email found</span>
+                      )}
+                    </div>
+                    {business.relevanceReason && (
+                      <p className="mt-2 text-xs text-primary">{business.relevanceReason}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Search + table */}
       <div className="overflow-hidden rounded-xl border bg-card/95 shadow-sm">

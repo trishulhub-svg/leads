@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import { TemplatesManager, type EmailTemplate, type BrandPublic } from "./templates-manager";
+import type { PlanLimits } from "@/lib/plan";
 
 type Campaign = {
   id: number;
@@ -33,11 +34,13 @@ export function CampaignsView({
   initialCampaigns,
   templates: initialTemplates,
   initialBrand,
+  plan,
   leadCount,
 }: {
   initialCampaigns: Campaign[];
   templates: Template[];
   initialBrand: BrandPublic;
+  plan: PlanLimits;
   leadCount: number;
 }) {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
@@ -46,6 +49,10 @@ export function CampaignsView({
   const [showCreate, setShowCreate] = React.useState(false);
   const [sending, setSending] = React.useState<number | null>(null);
   const [result, setResult] = React.useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Free plan: campaigns may only use the first (included) template.
+  const usableTemplates =
+    plan.plan === "premium" ? templates : templates.length > 0 ? [templates[0]] : [];
 
   async function refresh() {
     const res = await fetch("/api/campaigns");
@@ -107,7 +114,7 @@ export function CampaignsView({
       </div>
 
       {tab === "templates" ? (
-        <TemplatesManager initialTemplates={templates} initialBrand={initialBrand} onChanged={refreshTemplates} />
+        <TemplatesManager initialTemplates={templates} initialBrand={initialBrand} plan={plan} onChanged={refreshTemplates} />
       ) : (
         <div className="space-y-4">
       {result && (
@@ -134,7 +141,8 @@ export function CampaignsView({
 
       {showCreate && (
         <CreateCampaignForm
-          templates={templates}
+          templates={usableTemplates}
+          plan={plan}
           onCreated={() => {
             setShowCreate(false);
             refresh();
@@ -222,9 +230,11 @@ function StatusBadge({ status }: { status: string }) {
 
 function CreateCampaignForm({
   templates,
+  plan,
   onCreated,
 }: {
   templates: Template[];
+  plan: PlanLimits;
   onCreated: () => void;
 }) {
   const [saving, setSaving] = React.useState(false);
@@ -275,6 +285,9 @@ function CreateCampaignForm({
                 </option>
               ))}
             </Select>
+            {plan.plan === "free" && (
+              <p className="text-[11px] text-muted-foreground">Free plan includes 1 template. Upgrade for more.</p>
+            )}
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="niche" className="text-xs">Niche (optional — filters leads by niche)</Label>

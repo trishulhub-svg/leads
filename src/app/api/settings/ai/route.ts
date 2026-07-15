@@ -17,6 +17,14 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { getPlanLimits } = await import("@/lib/plan");
+  const limits = await getPlanLimits();
+  if (!limits.leadIntelligence) {
+    return NextResponse.json(
+      { error: "Lead intelligence is a Premium feature. Upgrade to unlock DeepSeek AI settings.", upgrade: true },
+      { status: 403 }
+    );
+  }
   try {
     const body = (await req.json()) as {
       apiKey?: string;
@@ -41,6 +49,14 @@ export async function PUT(req: Request) {
 
 export async function POST() {
   if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { getPlanLimits } = await import("@/lib/plan");
+  const limits = await getPlanLimits();
+  if (!limits.leadIntelligence) {
+    return NextResponse.json(
+      { error: "Lead intelligence is a Premium feature. Upgrade to unlock.", upgrade: true },
+      { status: 403 }
+    );
+  }
   try {
     return NextResponse.json({ ok: true, ...(await testAiConnection()) });
   } catch (error) {
