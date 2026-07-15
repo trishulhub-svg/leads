@@ -9,6 +9,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import { pickSmtp, resolveSmtp, markFailure } from "./smtpLoadBalancer";
 import { sendCampaignEmail, interpolate } from "./email";
+import { createUnsubscribeUrl } from "./unsubscribe";
 
 export type SendOutcome = {
   processed: number;
@@ -157,10 +158,23 @@ export async function drainCampaign(campaignId: number, opts: { maxJobs?: number
       ? await db.select().from(schema.leads).where(eq(schema.leads.id, next.leadId)).limit(1).then((r) => r[0])
       : null;
 
+    const unsubscribeUrl = await createUnsubscribeUrl(next.email);
     const htmlBody = template
-      ? interpolate(template.htmlBody, { firstName: lead?.firstName, company: lead?.company, email: next.email })
+      ? interpolate(template.htmlBody, {
+          firstName: lead?.firstName,
+          company: lead?.company,
+          email: next.email,
+          ctaUrl: template.ctaUrl,
+          unsubscribeUrl,
+        })
       : `<p>${escapeBasic(next.email)}</p>`;
-    const subject = template ? interpolate(template.subject, { firstName: lead?.firstName, company: lead?.company }) : next.subject;
+    const subject = template
+      ? interpolate(template.subject, {
+          firstName: lead?.firstName,
+          company: lead?.company,
+          email: next.email,
+        })
+      : next.subject;
 
     try {
       const smtp = await resolveSmtp(smtpRow);
@@ -170,6 +184,7 @@ export async function drainCampaign(campaignId: number, opts: { maxJobs?: number
         subject,
         html: htmlBody,
         sentEmailId: next.id,
+        unsubscribeUrl,
       });
       await db.update(schema.sentEmails).set({ status: "sent", smtpConfigId: smtpRow.id, sentAt: new Date() }).where(eq(schema.sentEmails.id, next.id));
       out.sent++;
