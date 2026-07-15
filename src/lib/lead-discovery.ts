@@ -3,8 +3,13 @@ import { fetchPublicHtml } from "./safe-fetch";
 import { rankBusinesses, type BusinessForAi } from "./ai";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_URLS = [
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+] as const;
 const USER_AGENT = "TrishulhubLeads/1.0 (+https://trishulhub.com)";
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 25;
 
 type OsmTags = Record<string, string>;
 type OverpassElement = {
@@ -15,6 +20,12 @@ type OverpassElement = {
   center?: { lat: number; lon: number };
   tags?: OsmTags;
 };
+
+const geocodeCache = new Map<
+  string,
+  { expiresAt: number; value: { label: string; latitude: number; longitude: number } }
+>();
+const overpassCache = new Map<string, { expiresAt: number; value: OverpassElement[] }>();
 
 export type DiscoveredBusiness = {
   id: string;
@@ -101,6 +112,10 @@ export async function discoverLocalLeads(input: {
 }
 
 async function geocodeIndia(query: string): Promise<{ label: string; latitude: number; longitude: number }> {
+  const cacheKey = query.trim().toLowerCase();
+  const cached = readCache(geocodeCache, cacheKey);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
     q: query,
     format: "jsonv2",
@@ -117,11 +132,13 @@ async function geocodeIndia(query: string): Promise<{ label: string; latitude: n
   const rows = (await response.json()) as Array<{ display_name: string; lat: string; lon: string }>;
   const row = rows[0];
   if (!row) throw new Error("Location not found in India. Try a city, locality, or PIN code.");
-  return {
+  const point = {
     label: row.display_name,
     latitude: Number(row.lat),
     longitude: Number(row.lon),
   };
+  writeCache(geocodeCache, cacheKey, point);
+  return point;
 }
 
 async function searchOpenStreetMap(
@@ -129,8 +146,12 @@ async function searchOpenStreetMap(
   longitude: number,
   radiusKm: number
 ): Promise<OverpassElement[]> {
+  const cacheKey = `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${radiusKm}`;
+  const cached = readCache(overpassCache, cacheKey);
+  if (cached) return cached;
+
   const radius = radiusKm * 1000;
-  const query = `[out:json][timeout:30];
+  const query = `[out:json][timeout:20];
 (
   nwr(around:${radius},${latitude},${longitude})["name"]["website"];
   nwr(around:${radius},${latitude},${longitude})["name"]["contact:website"];
@@ -138,20 +159,74 @@ async function searchOpenStreetMap(
   nwr(around:${radius},${latitude},${longitude})["name"]["contact:email"];
 );
 out center 160;`;
-  const response = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: {
-      "User-Agent": USER_AGENT,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: new URLSearchParams({ data: query }),
-    signal: AbortSignal.timeout(35_000),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("Business map search is busy. Please try again shortly.");
-  const body = (await response.json()) as { elements?: OverpassElement[] };
-  return body.elements || [];
+  const errors: string[] = [];
+
+  // Try both independently operated global instances, then retry the first
+  // after a short backoff. Per-attempt timeouts keep the whole route inside the
+  // serverless execution budget.
+  const attempts = [OVERPASS_URLS[0], OVERPASS_URLS[1], OVERPASS_URLS[0]];
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    const endpoint = attempts[attempt];
+    if (attempt > 0) await wait(600 * attempt);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(12_000),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        errors.push(`${new URL(endpoint).hostname}: HTTP ${response.status}`);
+        if (response.status < 500 && response.status !== 429) break;
+        continue;
+      }
+      const body = (await response.json()) as { elements?: OverpassElement[] };
+      const elements = body.elements || [];
+      writeCache(overpassCache, cacheKey, elements);
+      return elements;
+    } catch (error) {
+      errors.push(
+        `${new URL(endpoint).hostname}: ${error instanceof Error ? error.message : "request failed"}`
+      );
+    }
+  }
+
+  console.error("[lead-discovery] all Overpass providers failed:", errors.join("; "));
+  throw new Error("Business map providers are temporarily busy. Please try again shortly.");
+}
+
+function readCache<K, V>(
+  cache: Map<K, { expiresAt: number; value: V }>,
+  key: K
+): V | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function writeCache<K, V>(
+  cache: Map<K, { expiresAt: number; value: V }>,
+  key: K,
+  value: V
+): void {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value as K | undefined;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uniqueBusinesses(

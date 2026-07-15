@@ -33,11 +33,14 @@ async function cleanLeads() {
 
   // Test 1: extractEmails finds mailto: + plain emails.
   const extracted = extractEmails(
-    `<a href="mailto:alice@Example.COM">x</a> contact bob@test.io please NO@example`
+    `<a href="mailto:alice@Example.COM">x</a> contact bob@test.io please NO@example
+     docs: user@domain.com and person@example.com`
   );
   assert(extracted.includes("alice@example.com"), "extractEmails decodes mailto: + normalizes case");
   assert(extracted.includes("bob@test.io"), "extractEmails finds plain emails");
   assert(!extracted.includes("no@example"), "extractEmails rejects incomplete addresses");
+  assert(!extracted.includes("user@domain.com"), "extractEmails rejects common placeholder addresses");
+  assert(!extracted.includes("person@example.com"), "extractEmails rejects reserved example domains");
 
   // Test 2: import adds valid leads.
   const r1 = await importLeads(
@@ -81,6 +84,18 @@ async function cleanLeads() {
   const r4 = await importLeads([{ email: "sentbefore@delta.com" }, { email: "fresh@epsilon.com" }], "manual");
   assert(r4.alreadySent === 1, "already-sent email is rejected at import (hard dedup rule)");
   assert(r4.added === 1, "fresh email still imports fine");
+
+  // Test 6: placeholder addresses found in website examples never enter the lead pool.
+  const r5 = await importLeads(
+    [
+      { email: "user@domain.com" },
+      { email: "sales@example.com" },
+      { email: "real.contact@legitimate-business.co" },
+    ],
+    "discovery"
+  );
+  assert(r5.invalid === 2, "placeholder and reserved-domain emails are counted as invalid");
+  assert(r5.added === 1, "a legitimate discovered email still imports");
 
   await cleanLeads();
   console.log("\n=== All leads/dedup tests passed ✅ ===\n");

@@ -45,14 +45,18 @@ async function seedTestSmtps() {
   assert(pick3!.id === pick1!.id, "third pick wraps back to the first (round-robin cycle)");
   console.log(`   picks: ${pick1!.label} → ${pick2!.label} → ${pick3!.label}`);
 
-  // Test 2: when P1 fails (marked unhealthy), picks avoid it.
-  await markFailure(pick1!.id, "simulated failure");
+  // Test 2: three consecutive failures mark P1 unhealthy, so picks avoid it.
+  for (let i = 1; i <= 3; i++) {
+    await markFailure(pick1!.id, `simulated failure ${i}`);
+  }
   const afterFail = await pickSmtp();
-  assert(afterFail!.id !== pick1!.id, "after P1 fails, it's skipped");
-  console.log(`   after P1 fails, pick was: ${afterFail!.label}`);
+  assert(afterFail!.id !== pick1!.id, "after 3 consecutive P1 failures, it's skipped");
+  console.log(`   after P1 reaches the failure threshold, pick was: ${afterFail!.label}`);
 
   // Test 3: when ALL primaries fail, failover to emergency.
-  await markFailure(pick2!.id, "simulated failure");
+  for (let i = 1; i <= 3; i++) {
+    await markFailure(pick2!.id, `simulated failure ${i}`);
+  }
   const emergencyPick = await pickSmtp();
   assert(emergencyPick!.role === "emergency", "all primaries down → fails over to Emergency");
   console.log(`   all primaries down → emergency pick: ${emergencyPick!.label}`);
@@ -67,7 +71,9 @@ async function seedTestSmtps() {
   // Test 5: daily limit enforcement. Exhaust P1's limit (2) by marking sent.
   await resetAllDailyLimits();
   // Mark P1 unhealthy so we force round-robin to P2 only, then exhaust P2.
-  await markFailure(pick1!.id, "temp");
+  for (let i = 1; i <= 3; i++) {
+    await markFailure(pick1!.id, `temporary failure ${i}`);
+  }
   // Drain P2's limit.
   const p2row = (await db.select().from(schema.smtpConfigs).where(eq(schema.smtpConfigs.label, "P2")))[0];
   await db.update(schema.smtpConfigs).set({ sentToday: 2 }).where(eq(schema.smtpConfigs.id, p2row.id));
