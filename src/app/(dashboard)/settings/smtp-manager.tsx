@@ -1,12 +1,14 @@
 // src/app/(dashboard)/settings/smtp-manager.tsx
 "use client";
 import * as React from "react";
-import { Plus, Trash2, Plug, Loader2, CheckCircle2, XCircle, ShieldAlert, Server } from "lucide-react";
+import { Plus, Trash2, Plug, Loader2, CheckCircle2, XCircle, ShieldAlert, Server, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
+import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 type SmtpRow = {
@@ -34,7 +36,7 @@ type SmtpRow = {
 
 export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
   const [configs, setConfigs] = React.useState<SmtpRow[]>(initial);
-  const [editing, setEditing] = React.useState<SmtpRow | "new" | null>(null);
+  const [editing, setEditing] = React.useState<SmtpRow | "new-primary" | "new-emergency" | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
 
   // Refresh from server after mutations.
@@ -94,7 +96,7 @@ export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
         accent="primary"
         onEdit={(r) => setEditing(r)}
         onDelete={handleDelete}
-        onAdd={primary.length < 4 ? () => setEditing("new") : undefined}
+        onAdd={primary.length < 4 ? () => setEditing("new-primary") : undefined}
         addLabel="Add Primary SMTP"
       />
 
@@ -105,13 +107,14 @@ export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
         accent="amber"
         onEdit={(r) => setEditing(r)}
         onDelete={handleDelete}
-        onAdd={emergency.length < 4 ? () => setEditing("new") : undefined}
+        onAdd={emergency.length < 4 ? () => setEditing("new-emergency") : undefined}
         addLabel="Add Emergency SMTP"
       />
 
       {editing && (
         <SmtpEditor
-          initial={editing === "new" ? null : editing}
+          initial={typeof editing === "string" ? null : editing}
+          defaultRole={editing === "new-emergency" ? "emergency" : "primary"}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -137,7 +140,7 @@ function PoolSummary({
   accent: "primary" | "amber";
 }) {
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:border-primary/20 hover:shadow-md">
       <CardContent className="flex items-center gap-4 p-4">
         <div
           className={cn(
@@ -225,7 +228,7 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
   }
 
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:border-primary/20 hover:shadow-md">
       <CardContent className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -254,9 +257,9 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
               </p>
             )}
             {testResult && (
-              <p className={cn("mt-1 text-xs", testResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+              <Alert variant={testResult.ok ? "success" : "error"} className="mt-2 py-2 text-xs">
                 {testResult.msg}
-              </p>
+              </Alert>
             )}
           </div>
           <div className="flex shrink-0 gap-1">
@@ -267,7 +270,7 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
             <Button size="sm" variant="ghost" onClick={onEdit}>
               Edit
             </Button>
-            <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive">
+            <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive" aria-label={`Delete ${row.label}`}>
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -279,16 +282,53 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
 
 function SmtpEditor({
   initial,
+  defaultRole,
   onClose,
   onSaved,
 }: {
   initial: SmtpRow | null;
+  defaultRole: "primary" | "emergency";
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const isEdit = !!initial;
+  const headingId = "smtp-editor-title";
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusableSelector =
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+    const focusFirst = window.setTimeout(() => {
+      panelRef.current?.querySelector<HTMLElement>(focusableSelector)?.focus();
+    }, 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "Tab" && panelRef.current) {
+        const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(focusableSelector));
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.clearTimeout(focusFirst);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -330,36 +370,50 @@ function SmtpEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <CardHeader>
-          <CardTitle>{isEdit ? "Edit SMTP" : "Add SMTP"}</CardTitle>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4" onClick={onClose}>
+      <Card
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        className="max-h-[94vh] w-full max-w-2xl overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardHeader className="sticky top-0 z-10 border-b bg-card/95 backdrop-blur">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle id={headingId}>{isEdit ? "Edit SMTP connection" : "Add SMTP connection"}</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Secure outbound delivery and optional reply monitoring.</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close SMTP editor">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="label" className="text-xs">Label *</Label>
                 <Input id="label" name="label" defaultValue={initial?.label} required placeholder="Brevo Primary" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="role" className="text-xs">Role *</Label>
-                <select
+                <Select
                   id="role"
                   name="role"
-                  defaultValue={initial?.role ?? "primary"}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  defaultValue={initial?.role ?? defaultRole}
                 >
                   <option value="primary">Primary</option>
                   <option value="emergency">Emergency</option>
-                </select>
+                </Select>
               </div>
             </div>
 
-            <div className="rounded-md bg-muted/50 p-3">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Outbound SMTP</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-1.5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="host" className="text-xs">Host *</Label>
                   <Input id="host" name="host" defaultValue={initial?.host} required placeholder="smtp-relay.brevo.com" />
                 </div>
@@ -368,7 +422,7 @@ function SmtpEditor({
                   <Input id="port" name="port" type="number" defaultValue={initial?.port ?? 587} required />
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="user" className="text-xs">Username *</Label>
                   <Input id="user" name="user" defaultValue={initial?.user} required />
@@ -386,10 +440,10 @@ function SmtpEditor({
               </label>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="fromName" className="text-xs">From name</Label>
-                <Input id="fromName" name="fromName" defaultValue={initial?.fromName ?? "Taroon"} />
+                <Input id="fromName" name="fromName" defaultValue={initial?.fromName ?? "Trishulhub"} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="fromEmail" className="text-xs">From email *</Label>
@@ -403,10 +457,10 @@ function SmtpEditor({
               <p className="text-xs text-muted-foreground">When this SMTP hits the limit, it auto-fails over to the next.</p>
             </div>
 
-            <details className="rounded-md border p-3">
+            <details className="rounded-xl border p-4">
               <summary className="cursor-pointer text-sm font-medium">Inbound IMAP (for reply monitoring)</summary>
               <div className="mt-3 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="imapHost" className="text-xs">IMAP host</Label>
                     <Input id="imapHost" name="imapHost" defaultValue={initial?.imapHost ?? ""} placeholder="imap.gmail.com" />
@@ -416,7 +470,7 @@ function SmtpEditor({
                     <Input id="imapPort" name="imapPort" type="number" defaultValue={initial?.imapPort ?? 993} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="imapUser" className="text-xs">IMAP username</Label>
                     <Input id="imapUser" name="imapUser" defaultValue={initial?.imapUser ?? ""} />
@@ -434,7 +488,7 @@ function SmtpEditor({
               </div>
             </details>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <Alert variant="error">{error}</Alert>}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={onClose}>

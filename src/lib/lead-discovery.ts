@@ -3,8 +3,14 @@ import { fetchPublicHtml } from "./safe-fetch";
 import { rankBusinesses, type BusinessForAi } from "./ai";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_URLS = [
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+  "https://z.overpass-api.de/api/interpreter",
+] as const;
 const USER_AGENT = "TrishulhubLeads/1.0 (+https://trishulhub.com)";
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 25;
 
 type OsmTags = Record<string, string>;
 type OverpassElement = {
@@ -15,6 +21,12 @@ type OverpassElement = {
   center?: { lat: number; lon: number };
   tags?: OsmTags;
 };
+
+const geocodeCache = new Map<
+  string,
+  { expiresAt: number; value: { label: string; latitude: number; longitude: number } }
+>();
+const overpassCache = new Map<string, { expiresAt: number; value: OverpassElement[] }>();
 
 export type DiscoveredBusiness = {
   id: string;
@@ -51,7 +63,12 @@ export async function discoverLocalLeads(input: {
   if (category.length < 2) throw new Error("Enter the type of business you want to find.");
 
   const point = await geocodeIndia(location);
-  const elements = await searchOpenStreetMap(point.latitude, point.longitude, radiusKm);
+  const elements = await searchOpenStreetMap(
+    point.latitude,
+    point.longitude,
+    radiusKm,
+    category
+  );
   const candidates = uniqueBusinesses(elements, point.latitude, point.longitude, category);
 
   let rankings = new Map<string, { relevant: boolean; reason: string }>();
@@ -101,6 +118,10 @@ export async function discoverLocalLeads(input: {
 }
 
 async function geocodeIndia(query: string): Promise<{ label: string; latitude: number; longitude: number }> {
+  const cacheKey = query.trim().toLowerCase();
+  const cached = readCache(geocodeCache, cacheKey);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
     q: query,
     format: "jsonv2",
@@ -117,41 +138,152 @@ async function geocodeIndia(query: string): Promise<{ label: string; latitude: n
   const rows = (await response.json()) as Array<{ display_name: string; lat: string; lon: string }>;
   const row = rows[0];
   if (!row) throw new Error("Location not found in India. Try a city, locality, or PIN code.");
-  return {
+  const point = {
     label: row.display_name,
     latitude: Number(row.lat),
     longitude: Number(row.lon),
   };
+  writeCache(geocodeCache, cacheKey, point);
+  return point;
 }
 
 async function searchOpenStreetMap(
   latitude: number,
   longitude: number,
-  radiusKm: number
+  radiusKm: number,
+  category: string
 ): Promise<OverpassElement[]> {
+  const categoryPattern = buildCategoryPattern(category);
+  const cacheKey = `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${radiusKm}:${categoryPattern}`;
+  const cached = readCache(overpassCache, cacheKey);
+  if (cached) return cached;
+
   const radius = radiusKm * 1000;
-  const query = `[out:json][timeout:30];
+  const selectors = buildOverpassSelectors(radius, latitude, longitude, categoryPattern);
+  const query = `[out:json][timeout:20];
 (
-  nwr(around:${radius},${latitude},${longitude})["name"]["website"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["contact:website"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["email"];
-  nwr(around:${radius},${latitude},${longitude})["name"]["contact:email"];
+${selectors.map((selector) => `  ${selector}`).join("\n")}
 );
 out center 160;`;
-  const response = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: {
-      "User-Agent": USER_AGENT,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: new URLSearchParams({ data: query }),
-    signal: AbortSignal.timeout(35_000),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("Business map search is busy. Please try again shortly.");
-  const body = (await response.json()) as { elements?: OverpassElement[] };
-  return body.elements || [];
+  const errors: string[] = [];
+
+  // Try global endpoints from two operators with a short backoff. Per-attempt
+  // timeouts keep the whole route inside the serverless execution budget.
+  for (let attempt = 0; attempt < OVERPASS_URLS.length; attempt++) {
+    const endpoint = OVERPASS_URLS[attempt];
+    if (attempt > 0) await wait(600 * attempt);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(12_000),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        errors.push(`${new URL(endpoint).hostname}: HTTP ${response.status}`);
+        if (response.status < 500 && response.status !== 429) break;
+        continue;
+      }
+      const body = (await response.json()) as { elements?: OverpassElement[] };
+      const elements = body.elements || [];
+      writeCache(overpassCache, cacheKey, elements);
+      return elements;
+    } catch (error) {
+      errors.push(
+        `${new URL(endpoint).hostname}: ${error instanceof Error ? error.message : "request failed"}`
+      );
+    }
+  }
+
+  console.error("[lead-discovery] all Overpass providers failed:", errors.join("; "));
+  throw new Error("Business map providers are temporarily busy. Please try again shortly.");
+}
+
+function readCache<K, V>(
+  cache: Map<K, { expiresAt: number; value: V }>,
+  key: K
+): V | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function writeCache<K, V>(
+  cache: Map<K, { expiresAt: number; value: V }>,
+  key: K,
+  value: V
+): void {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value as K | undefined;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildCategoryPattern(category: string): string {
+  const words = category
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 1)
+    .slice(0, 6);
+  const aliases: Record<string, string[]> = {
+    agencies: ["agency"],
+    agency: ["agencies"],
+    dental: ["dentist"],
+    dentist: ["dental"],
+    doctor: ["doctors", "physician"],
+    doctors: ["doctor", "physician"],
+    gym: ["fitness", "fitness_centre"],
+    hotel: ["guest_house", "hostel"],
+    lawyer: ["legal", "solicitor"],
+    marketing: ["advertising", "agency", "advertising_agency", "marketing_agency"],
+    property: ["estate_agent", "real_estate"],
+    restaurant: ["food", "cafe"],
+    salon: ["beauty", "hairdresser"],
+    school: ["education", "college", "training"],
+    software: ["technology", "it"],
+  };
+  const expanded = new Set(words);
+  if (words.length > 1) expanded.add(words.join("_"));
+  for (const word of words) {
+    if (word.length > 3 && word.endsWith("s")) expanded.add(word.slice(0, -1));
+    for (const alias of aliases[word] || []) expanded.add(alias);
+  }
+  // User input is embedded in an Overpass regex, so escape every token.
+  const values = Array.from(expanded).map((word) =>
+    word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  );
+  return `^(${values.join("|")})$`;
+}
+
+function buildOverpassSelectors(
+  radius: number,
+  latitude: number,
+  longitude: number,
+  categoryPattern: string
+): string[] {
+  const around = `(around:${radius},${latitude},${longitude})`;
+  const categoryTags = ["amenity", "shop", "office", "craft", "tourism", "healthcare"];
+  // Business POIs are overwhelmingly mapped as nodes. Querying ways/relations
+  // with a radius is dramatically more expensive on public Overpass instances
+  // and caused repeated 504s even for small radii.
+  return categoryTags.map(
+    (categoryTag) =>
+      `node${around}["${categoryTag}"~"${categoryPattern}",i];`
+  );
 }
 
 function uniqueBusinesses(

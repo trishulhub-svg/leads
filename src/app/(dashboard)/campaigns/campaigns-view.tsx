@@ -1,13 +1,16 @@
 // src/app/(dashboard)/campaigns/campaigns-view.tsx
 "use client";
 import * as React from "react";
-import { Send, Plus, Loader2, Mail, CheckCircle2, AlertCircle, Eye, MessageSquare } from "lucide-react";
+import { Send, Plus, Loader2, Mail, Eye, MessageSquare, Megaphone, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn, timeAgo } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
+import { Select } from "@/components/ui/select";
+import { timeAgo } from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
 
 type Campaign = {
   id: number;
@@ -79,21 +82,18 @@ export function CampaignsView({
   return (
     <div className="space-y-4">
       {result && (
-        <div
-          className={cn(
-            "flex items-start gap-2 rounded-md p-3 text-sm",
-            result.ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-destructive/10 text-destructive"
-          )}
-        >
-          {result.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-          <span>{result.msg}</span>
-        </div>
+        <Alert variant={result.ok ? "success" : "error"}>{result.msg}</Alert>
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {leadCount} raw leads available · {templates.length} templates
-        </p>
+      <div className="flex flex-col gap-3 rounded-xl border bg-card/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Users className="h-4 w-4 text-primary" /> <strong className="text-foreground">{leadCount}</strong> leads ready
+          </span>
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Mail className="h-4 w-4 text-violet-500" /> <strong className="text-foreground">{templates.length}</strong> templates
+          </span>
+        </div>
         <Button onClick={() => setShowCreate((s) => !s)}>
           <Plus className="h-4 w-4" /> New Campaign
         </Button>
@@ -110,20 +110,23 @@ export function CampaignsView({
       )}
 
       {campaigns.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-          No campaigns yet. Create one to start sending.
-        </div>
+        <EmptyState
+          icon={Megaphone}
+          title="No campaigns yet"
+          description="Create your first focused outreach campaign and turn your lead pool into conversations."
+          action={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create campaign</Button>}
+        />
       ) : (
         <div className="space-y-3">
           {campaigns.map((c) => {
             const template = templates.find((t) => t.id === c.templateId);
             return (
-              <Card key={c.id}>
+              <Card key={c.id} className="group transition-all duration-200 hover:border-primary/20 hover:shadow-lg hover:shadow-slate-950/[0.04]">
                 <CardContent className="p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex items-center gap-2">
-                        <span className="font-medium">{c.name}</span>
+                        <span className="font-semibold tracking-tight">{c.name}</span>
                         <StatusBadge status={c.status} />
                         {c.niche && <Badge variant="secondary">{c.niche}</Badge>}
                       </div>
@@ -148,9 +151,9 @@ export function CampaignsView({
                         <span>· {timeAgo(c.createdAt)}</span>
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-2">
+                    <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
                       {(c.status === "draft" || c.status === "paused" || c.status === "sending") && (
-                        <Button size="sm" onClick={() => sendCampaign(c.id)} disabled={sending === c.id}>
+                        <Button size="sm" className="w-full sm:w-auto" onClick={() => sendCampaign(c.id)} disabled={sending === c.id}>
                           {sending === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                           {c.status === "sending" ? "Continue sending" : "Send"}
                         </Button>
@@ -213,8 +216,12 @@ function CreateCampaignForm({
   }
 
   return (
-    <Card>
+    <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/[0.025]">
       <CardContent className="p-4">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold">Create a new campaign</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Choose a template and optionally narrow your audience by niche.</p>
+        </div>
         <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name" className="text-xs">Campaign name *</Label>
@@ -222,10 +229,9 @@ function CreateCampaignForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="templateId" className="text-xs">Template</Label>
-            <select
+            <Select
               id="templateId"
               name="templateId"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               defaultValue={templates[0]?.id ?? ""}
             >
               {templates.map((t) => (
@@ -233,13 +239,13 @@ function CreateCampaignForm({
                   {t.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="niche" className="text-xs">Niche (optional — filters leads by niche)</Label>
             <Input id="niche" name="niche" placeholder="e.g. SaaS, Agencies, E-commerce" />
           </div>
-          {error && <p className="text-sm text-destructive sm:col-span-2">{error}</p>}
+          {error && <Alert variant="error" className="sm:col-span-2">{error}</Alert>}
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}

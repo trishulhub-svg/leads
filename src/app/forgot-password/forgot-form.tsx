@@ -4,10 +4,12 @@ import * as React from "react";
 import { useActionState } from "react";
 import Link from "next/link";
 import { Mail, ArrowLeft, Loader2, CheckCircle2, KeyRound } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { forgotAction, verifyOtpAction, resetPasswordAction } from "@/server/auth-actions";
+import { AuthShell } from "@/components/auth-shell";
+import { Alert } from "@/components/ui/alert";
 
 export function ForgotForm() {
   const [stage, setStage] = React.useState<"request" | "verify" | "done">("request");
@@ -29,16 +31,33 @@ export function ForgotForm() {
   }, [otpState]);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/40 px-4 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/30">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/25">
-            <KeyRound className="h-7 w-7 text-primary-foreground" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">Reset your password</h1>
+    <AuthShell
+      title={stage === "request" ? "Reset your password" : stage === "verify" ? "Check your inbox" : "Choose a new password"}
+      description={
+        stage === "request"
+          ? "We’ll send a secure one-time code to your owner email."
+          : stage === "verify"
+            ? "Enter the six-digit code to verify your identity."
+            : "Create a strong password for your workspace."
+      }
+      icon={KeyRound}
+      footer={
+        <Link href="/login" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+          <ArrowLeft className="h-4 w-4" /> Back to login
+        </Link>
+      }
+    >
+        <div className="mb-6 grid grid-cols-3 gap-2" aria-label="Password reset progress">
+          {["Email", "Verify", "Reset"].map((label, index) => {
+            const activeIndex = stage === "request" ? 0 : stage === "verify" ? 1 : 2;
+            return (
+              <div key={label}>
+                <div className={`h-1 rounded-full ${index <= activeIndex ? "bg-primary" : "bg-muted"}`} />
+                <p className={`mt-1.5 text-[10px] font-semibold ${index === activeIndex ? "text-primary" : "text-muted-foreground"}`}>{label}</p>
+              </div>
+            );
+          })}
         </div>
-
-        <div className="rounded-2xl border bg-card/80 p-8 shadow-xl backdrop-blur-sm">
           {stage === "request" && (
             <form
               action={(fd) => {
@@ -58,12 +77,10 @@ export function ForgotForm() {
                 </div>
               </div>
               {reqState?.error && (
-                <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{reqState.error}</div>
+                <Alert variant="error">{reqState.error}</Alert>
               )}
               {reqState?.ok && (
-                <div className="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  If the email exists, a reset code has been sent.
-                </div>
+                <Alert variant="success">If the email exists, a reset code has been sent.</Alert>
               )}
               <Button type="submit" disabled={reqPending} className="w-full">
                 {reqPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -92,7 +109,7 @@ export function ForgotForm() {
                 />
               </div>
               {otpState?.error && (
-                <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{otpState.error}</div>
+                <Alert variant="error">{otpState.error}</Alert>
               )}
               <Button type="submit" disabled={otpPending} className="w-full">
                 {otpPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -102,15 +119,7 @@ export function ForgotForm() {
           )}
 
           {stage === "done" && <ResetPanel token={resetToken} />}
-        </div>
-
-        <div className="mt-6 text-center">
-          <Link href="/login" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary">
-            <ArrowLeft className="h-4 w-4" /> Back to login
-          </Link>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }
 
@@ -119,11 +128,13 @@ function ResetPanel({ token }: { token: string }) {
   if (state?.ok) {
     return (
       <div className="space-y-4 text-center">
-        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
-        <p className="text-sm">Your password has been reset. You can now sign in.</p>
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10 text-success">
+          <CheckCircle2 className="h-7 w-7" />
+        </div>
+        <p className="text-sm font-medium">Your password has been reset. You can now sign in.</p>
         <Link
           href="/login"
-          className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className={`${buttonVariants({ size: "lg" })} w-full`}
         >
           Sign in
         </Link>
@@ -142,7 +153,7 @@ function ResetPanel({ token }: { token: string }) {
         <Input id="confirm" name="confirm" type="password" required minLength={8} placeholder="Repeat password" />
       </div>
       {state?.error && (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</div>
+        <Alert variant="error">{state.error}</Alert>
       )}
       <Button type="submit" disabled={pending} className="w-full">
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}

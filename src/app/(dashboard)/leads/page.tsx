@@ -2,6 +2,9 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { LeadsView } from "./leads-view";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
+import { Database, ShieldOff, Sparkles, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -23,20 +26,18 @@ export default async function LeadsPage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Raw Leads</h1>
-          <p className="text-sm text-muted-foreground">
-            Leads stay here until they reply to a campaign — then they move to the CRM.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="Lead intelligence"
+        icon={Sparkles}
+        title="Build your prospect universe"
+        description="Discover verified businesses, import contacts, and keep your outreach pool clean and ready."
+      />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatTile label="Raw leads" value={stats[0]?.raw ?? 0} />
-        <StatTile label="Blacklisted" value={stats[0]?.blacklisted ?? 0} />
-        <StatTile label="Total in pool" value={stats[0]?.total ?? 0} />
+        <StatCard compact icon={Users} label="Ready to contact" value={stats[0]?.raw ?? 0} detail="Qualified raw leads" />
+        <StatCard compact icon={ShieldOff} label="Suppressed" value={stats[0]?.blacklisted ?? 0} detail="Blacklisted contacts" tone="warning" />
+        <StatCard compact icon={Database} label="Total database" value={stats[0]?.total ?? 0} detail="All stored contacts" tone="violet" />
       </div>
 
       <LeadsView
@@ -45,15 +46,6 @@ export default async function LeadsPage() {
           createdAt: l.createdAt.toISOString(),
         }))}
       />
-    </div>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { ChangePasswordForm } from "./change-password-form";
 import { SmtpManager } from "./smtp-manager";
 import { AiSettings } from "./ai-settings";
 import { getPublicAiConfig } from "@/lib/ai";
+import { PageHeader } from "@/components/page-header";
+import { Bot, LockKeyhole, Mail, SlidersHorizontal } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -39,32 +41,61 @@ export default async function SettingsPage() {
   }));
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage lead intelligence, email infrastructure, and account security.</p>
-      </div>
+    <div className="space-y-9">
+      <PageHeader
+        eyebrow="Workspace controls"
+        icon={SlidersHorizontal}
+        title="Settings & infrastructure"
+        description="Configure intelligence providers, sending infrastructure, and security from one place."
+      />
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold">Lead intelligence</h2>
+        <SectionTitle icon={Bot} title="Lead intelligence" description="AI configuration for discovery relevance and enrichment." />
         <AiSettings initial={aiConfig} />
       </div>
 
       <div className="border-t pt-8">
-        <h2 className="mb-4 text-lg font-semibold">Email infrastructure</h2>
+        <SectionTitle icon={Mail} title="Email infrastructure" description="Primary delivery accounts and emergency failover capacity." />
       </div>
       <SmtpManager initial={safeSmtp} />
 
       <div className="border-t pt-8">
-        <h2 className="mb-4 text-lg font-semibold">Account</h2>
-        <div className="max-w-md rounded-lg border bg-card p-5">
-          <div className="mb-4">
+        <SectionTitle icon={LockKeyhole} title="Account security" description="Identity and password controls for this workspace." />
+        <div className="max-w-xl rounded-xl border bg-card/95 p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-center gap-3 rounded-xl bg-muted/30 p-3.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+              {(user?.name || "F").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Logged in as</p>
-            <p className="font-medium">{user?.name}</p>
-            <p className="text-sm text-muted-foreground">{user?.email}</p>
+              <p className="truncate font-semibold">{user?.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+            </div>
           </div>
           <ChangePasswordForm />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-4 flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
       </div>
     </div>
   );

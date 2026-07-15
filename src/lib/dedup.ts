@@ -3,7 +3,7 @@
 // pre-check at import time so the user sees what will be skipped.
 import { inArray } from "drizzle-orm";
 import { db, schema } from "./db";
-import { normalizeEmail } from "./normalize";
+import { isUsableLeadEmail, normalizeEmail } from "./normalize";
 
 export type ImportRow = {
   email: string;
@@ -51,7 +51,7 @@ export async function importLeads(
 
   for (const row of rows) {
     const norm = normalizeEmail(row.email || "");
-    if (!norm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(norm)) {
+    if (!norm || !isUsableLeadEmail(norm)) {
       report.invalid++;
       continue;
     }
