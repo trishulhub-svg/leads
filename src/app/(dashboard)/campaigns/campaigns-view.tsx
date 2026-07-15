@@ -11,7 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { Select } from "@/components/ui/select";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
-import { TemplatesManager, type EmailTemplate } from "./templates-manager";
+import { TemplatesManager, type EmailTemplate, type BrandPublic } from "./templates-manager";
 
 type Campaign = {
   id: number;
@@ -32,10 +32,12 @@ type Template = EmailTemplate;
 export function CampaignsView({
   initialCampaigns,
   templates: initialTemplates,
+  initialBrand,
   leadCount,
 }: {
   initialCampaigns: Campaign[];
   templates: Template[];
+  initialBrand: BrandPublic;
   leadCount: number;
 }) {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
@@ -105,7 +107,7 @@ export function CampaignsView({
       </div>
 
       {tab === "templates" ? (
-        <TemplatesManager initialTemplates={templates} onChanged={refreshTemplates} />
+        <TemplatesManager initialTemplates={templates} initialBrand={initialBrand} onChanged={refreshTemplates} />
       ) : (
         <div className="space-y-4">
       {result && (

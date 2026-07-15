@@ -46,6 +46,8 @@ function assert(cond: boolean, msg: string) {
   for (const t of templates) {
     assert(t.htmlBody.includes("{{unsubscribe_url}}"), `${t.name} includes unsubscribe button merge tag`);
     assert(t.htmlBody.includes("{{cta_url}}"), `${t.name} includes cta_url merge tag`);
+    assert(t.htmlBody.includes("{{brand_name}}"), `${t.name} is brand-neutral`);
+    assert(!t.htmlBody.includes("Trishulhub"), `${t.name} has no hardcoded Trishulhub brand`);
     assert(t.htmlBody.includes(">Unsubscribe<"), `${t.name} has visible Unsubscribe button`);
     const rendered = interpolate(t.htmlBody, {
       firstName: "Aarav",
@@ -53,8 +55,13 @@ function assert(cond: boolean, msg: string) {
       email: "aarav@acme.io",
       ctaUrl: t.ctaUrl,
       unsubscribeUrl: url,
+      brandName: "Acme Outreach",
+      senderName: "Acme Team",
+      brandColor: "#1d4ed8",
+      logoUrl: null,
     });
     assert(rendered.includes(url), `${t.name} renders working unsubscribe href`);
+    assert(rendered.includes("Acme Outreach"), `${t.name} renders brand name`);
     assert(!rendered.includes("{{unsubscribe_url}}"), `${t.name} leaves no unsubscribe placeholder`);
     assert(!rendered.includes("{{first_name}}"), `${t.name} leaves no first_name placeholder`);
   }

@@ -7,6 +7,10 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "./db";
 import { pickSmtp, resolveSmtp, buildTransporter, markSent, markFailure } from "./smtpLoadBalancer";
+import { interpolate, type TemplateVars } from "./template-interpolate";
+
+export type { TemplateVars };
+export { interpolate };
 
 /** Send a transactional email to the owner using the first healthy primary SMTP. */
 export async function sendOwnerEmail({
@@ -33,48 +37,6 @@ export async function sendOwnerEmail({
     await markFailure(smtp.id, err?.message ?? String(err));
     throw err;
   }
-}
-
-export type TemplateVars = {
-  firstName?: string | null;
-  company?: string | null;
-  email?: string | null;
-  /** Absolute URL — not HTML-escaped beyond attribute-safe encoding. */
-  ctaUrl?: string | null;
-  /** Absolute unsubscribe URL. */
-  unsubscribeUrl?: string | null;
-};
-
-/** Interpolate merge tags into a template subject or HTML body. */
-export function interpolate(html: string, vars: TemplateVars): string {
-  const first = vars.firstName || there(vars.email);
-  const cta = vars.ctaUrl || "#";
-  const unsub = vars.unsubscribeUrl || "#";
-  return html
-    .replace(/\{\{\s*first_name\s*\}\}/gi, escapeHtml(first))
-    .replace(/\{\{\s*last_name\s*\}\}/gi, "")
-    .replace(/\{\{\s*company\s*\}\}/gi, escapeHtml(vars.company || "your team"))
-    .replace(/\{\{\s*email\s*\}\}/gi, escapeHtml(vars.email || ""))
-    .replace(/\{\{\s*cta_url\s*\}\}/gi, escapeAttr(cta))
-    .replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, escapeAttr(unsub));
-}
-
-function there(email?: string | null): string {
-  if (!email) return "there";
-  const name = email.split("@")[0];
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /**
