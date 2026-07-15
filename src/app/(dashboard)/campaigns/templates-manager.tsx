@@ -24,8 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { PremiumGate, PremiumChip } from "@/components/premium-gate";
-import { UPGRADE_WHATSAPP } from "@/lib/plan";
-import type { PlanLimits } from "@/lib/plan";
+import { UPGRADE_WHATSAPP } from "@/lib/plan-constants";
+import type { PlanLimits } from "@/lib/plan-constants";
 import {
   compileVisualEmailHtml,
   decodeVisualMarker,

@@ -14,6 +14,7 @@ import { db, schema } from "./db";
 import { getSetting, setSetting } from "./settings";
 import { decrypt } from "./crypto";
 import type { SmtpRole } from "@/drizzle/schema";
+import { ensureSmtpQuotaColumns } from "./ensure-smtp-quota-columns";
 
 export type ResolvedSmtp = {
   id: number;
@@ -68,6 +69,7 @@ function underQuota(row: typeof schema.smtpConfigs.$inferSelect): boolean {
 
 /** Return healthy candidates (under all quotas) for a role, ordered by id. */
 async function healthyCandidates(role: SmtpRole) {
+  await ensureSmtpQuotaColumns();
   const rows = await db
     .select()
     .from(schema.smtpConfigs)

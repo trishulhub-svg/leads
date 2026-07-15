@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import { TemplatesManager, type EmailTemplate, type BrandPublic } from "./templates-manager";
-import type { PlanLimits } from "@/lib/plan";
+import type { PlanLimits } from "@/lib/plan-constants";
 
 type Campaign = {
   id: number;

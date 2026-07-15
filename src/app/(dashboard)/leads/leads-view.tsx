@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { timeAgo } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import { PremiumGate } from "@/components/premium-gate";
-import type { PlanLimits } from "@/lib/plan";
+import type { PlanLimits } from "@/lib/plan-constants";
 
 type Lead = {
   id: number;

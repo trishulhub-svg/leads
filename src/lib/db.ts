@@ -18,4 +18,6 @@ if (!url) {
 const client = createClient({ url, authToken });
 
 export const db = drizzle(client, { schema });
+/** Raw libSQL client for one-off DDL / PRAGMA (schema ensures). */
+export const clientSql = client;
 export { schema };
