@@ -52,6 +52,7 @@ export function DashboardShell({
 
   React.useEffect(() => {
     if (!mobileOpen) return;
+    const menuButton = menuButtonRef.current;
     const focusableSelector = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
     const focusFirst = window.setTimeout(() => {
       drawerRef.current?.querySelector<HTMLElement>(focusableSelector)?.focus();
@@ -78,7 +79,7 @@ export function DashboardShell({
       window.clearTimeout(focusFirst);
       document.removeEventListener("keydown", close);
       document.body.style.overflow = "";
-      menuButtonRef.current?.focus();
+      menuButton?.focus();
     };
   }, [mobileOpen]);
 
