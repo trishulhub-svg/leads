@@ -113,6 +113,22 @@
     max-width: 100%;
     overflow-x: hidden;
     overscroll-behavior-x: none;
+    /* Disables double-tap zoom; pinch still blocked by viewport + ZoomLock */
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+  }
+  /* Prevent iOS Safari auto-zoom on focus (it zooms inputs under 16px) */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: inherit;
+    }
   }
   /* Comfortable touch targets on phones without bloating desktop */
   @media (max-width: 640px) {

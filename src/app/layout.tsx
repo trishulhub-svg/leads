@@ -12,10 +12,11 @@ export const metadata: Metadata = {
   description: "Automated Lead Generation, 8-SMTP Email Marketing, and Minimalist CRM",
 };
 
-/** Lock pinch-zoom on phones so the operator UI stays layout-stable. Desktop/Mac unchanged. */
+/** Lock zoom in/out on every page (mobile + desktop browser zoom gestures). */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
