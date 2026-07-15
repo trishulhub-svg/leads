@@ -4,9 +4,10 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Clapperboard, ChevronLeft, ChevronRight, X, PlayCircle } from "lucide-react";
 
-const STORAGE_KEY = "trishulhub-product-tour-seen-v3";
+const STORAGE_KEY = "trishulhub-product-tour-seen-v4";
 
 type Step = {
+  /** Descriptive filename under /tour/slides — never remapped by number. */
   image: string;
   section: string;
   title: string;
@@ -16,12 +17,12 @@ type Step = {
 };
 
 /**
- * Detailed screenshot tour — lightweight JPEGs only (no MP4 / no audio).
- * Brand + template sections are expanded with field-level tips.
+ * Product tour — one verified screenshot per step (descriptive filenames).
+ * Capture/verify with: node scripts/rebuild-tour-slides.mjs
  */
 const STEPS: Step[] = [
   {
-    image: "/tour/slides/step-01.jpg",
+    image: "/tour/slides/01-login.jpg",
     section: "Access",
     title: "Sign in to your workspace",
     body: "Open Trishulhub Leads with the owner email and password for this workspace.",
@@ -31,14 +32,21 @@ const STEPS: Step[] = [
     ],
   },
   {
-    image: "/tour/slides/step-02.jpg",
+    image: "/tour/slides/02-login-filled.jpg",
     section: "Access",
     title: "Fill email and password",
-    body: "Enter credentials, then click Sign In to open the dashboard.",
+    body: "Enter credentials, then click Sign in to open the dashboard.",
     tips: ["After login you land on the command-center dashboard."],
   },
   {
-    image: "/tour/slides/step-03.jpg",
+    image: "/tour/slides/03-dashboard.jpg",
+    section: "Access",
+    title: "Dashboard overview",
+    body: "See sent emails, opens, replies, conversions, and recent conversations.",
+    tips: ["Use the sidebar to jump to Leads, Campaigns, CRM, or Settings."],
+  },
+  {
+    image: "/tour/slides/04-forgot-password.jpg",
     section: "Reset password",
     title: "Request a reset code",
     body: "Forgot password only works for an email that already exists in your database.",
@@ -49,183 +57,179 @@ const STEPS: Step[] = [
     dwellMs: 5500,
   },
   {
-    image: "/tour/slides/step-04.jpg",
+    image: "/tour/slides/05-forgot-filled.jpg",
     section: "Reset password",
     title: "Enter your registered email",
     body: "Submit the owner email so the app can send a one-time code.",
     tips: ["If SMTP is down, you’ll get a clear error instead of a fake success."],
   },
   {
-    image: "/tour/slides/step-05.jpg",
+    image: "/tour/slides/06-campaigns.jpg",
     section: "Campaigns",
     title: "Open Campaigns",
-    body: "Go to Campaigns to manage outreach runs and email templates.",
-    tips: ["Use the Email templates tab for brand + template editing (SMTP setup is separate in Settings)."],
+    body: "Campaigns is where you create outreach runs. Templates live in the next tab.",
+    tips: [
+      "This screen is Campaigns — not Leads or CRM.",
+      "Click Email templates to set brand and edit email content.",
+    ],
   },
   {
-    image: "/tour/slides/step-06.jpg",
+    image: "/tour/slides/07-email-templates-tab.jpg",
     section: "Email brand",
     title: "Switch to Email templates",
-    body: "Click Email templates to open brand settings and the template library.",
+    body: "Open the Email templates tab for brand settings and the template library.",
     tips: [
       "Brand settings sit at the top and apply to every template.",
-      "The left list is your template library; the right panel is the editor.",
+      "Left list = templates. Right panel = Visual / HTML / Preview editor.",
     ],
     dwellMs: 5500,
   },
   {
-    image: "/tour/slides/step-07.jpg",
+    image: "/tour/slides/08-brand-setup.jpg",
     section: "Email brand",
     title: "Set your email brand fields",
-    body: "Fill the brand bar so every outbound email looks consistent.",
+    body: "Fill brand name, sign-off, accent color, and optional logo.",
     tips: [
-      "Brand name — appears in the email header and {{brand_name}} merge tags.",
-      "Sign-off name — used in the closing (Warm regards, …).",
-      "Accent color — colors the header/CTA button (pick or type a hex).",
-      "Logo — optional Upload for PNG/JPEG/WebP/GIF.",
+      "Brand name — email header + {{brand_name}} merge tags.",
+      "Sign-off name — closing line (Warm regards, …).",
+      "Accent color — header/CTA color (picker or hex).",
+      "Logo — optional Upload (PNG/JPEG/WebP/GIF).",
     ],
     dwellMs: 7000,
   },
   {
-    image: "/tour/slides/step-08.jpg",
-    section: "Email brand",
-    title: "Brand + templates together",
-    body: "You can see brand settings above and templates below on the same screen.",
-    tips: [
-      "Change brand anytime — it updates previews across templates.",
-      "Free plan keeps one editable template; Premium unlocks the full library.",
-    ],
-    dwellMs: 6000,
-  },
-  {
-    image: "/tour/slides/step-09.jpg",
+    image: "/tour/slides/09-brand-saved.jpg",
     section: "Email brand",
     title: "Save brand",
-    body: "Click Save brand so name, sign-off, color, and logo are stored for campaigns.",
+    body: "Click Save brand so name, sign-off, color, and logo are stored for all templates.",
     tips: [
-      "Always Save brand before relying on Preview — unsaved color/name won’t stick.",
-      "Logo uploads save with the brand record.",
+      "Always Save brand before trusting Preview.",
+      "Unsaved color/name will not stick across reloads.",
     ],
     dwellMs: 5500,
   },
   {
-    image: "/tour/slides/step-10.jpg",
+    image: "/tour/slides/10-template-selected.jpg",
     section: "Edit templates",
     title: "Pick a template from the list",
-    body: "Select Cold Intro, Follow-up, Value Offer, or Case Study — or create New template.",
+    body: "Select Cold Intro, Follow-up, Value Offer, or Case Study — or click New template.",
     tips: [
       "Each row shows the template name and subject with merge tags.",
-      "Click a row to load it into the Visual / HTML / Preview editor.",
+      "Click a row to load it into the editor on the right.",
     ],
     dwellMs: 5500,
   },
   {
-    image: "/tour/slides/step-11.jpg",
+    image: "/tour/slides/11-template-visual-fields.jpg",
     section: "Edit templates",
     title: "Visual editor — name, subject, headline",
     body: "In Visual mode, set the fields that control inbox appearance and the email header.",
     tips: [
       "Template name — internal label (not shown to prospects).",
       "Subject line — supports {{company}}, {{brand_name}}, {{first_name}}.",
-      "Email headline — large title inside the email body.",
-      "Preview text — inbox snippet shown before the message is opened.",
+      "Email headline — large title inside the email.",
+      "Preview text — inbox snippet before the message is opened.",
     ],
     dwellMs: 7500,
   },
   {
-    image: "/tour/slides/step-12.jpg",
+    image: "/tour/slides/12-template-message-tags.jpg",
     section: "Edit templates",
     title: "Write the message with merge tags",
     body: "Use the Message box and click merge chips to personalize each send.",
     tips: [
-      "Click {{first_name}}, {{company}}, {{brand_name}}, or {{sender_name}} to insert at the cursor.",
+      "Click {{first_name}}, {{company}}, {{brand_name}}, or {{sender_name}} to insert.",
       "Blank lines create paragraphs; lines starting with - become bullets.",
-      "Keep the tone short and specific to the niche you’re emailing.",
-    ],
-    dwellMs: 7500,
-  },
-  {
-    image: "/tour/slides/step-13.jpg",
-    section: "Edit templates",
-    title: "Add the call-to-action button",
-    body: "Scroll the Visual editor to set button text, type, and URL, then Save changes.",
-    tips: [
-      "Button text — e.g. Book a quick call.",
-      "Button type — Landing / link, WhatsApp, or None.",
-      "Button URL — landing page or WhatsApp link (disabled when type is None).",
-      "Click Save changes before switching away.",
     ],
     dwellMs: 7000,
   },
   {
-    image: "/tour/slides/step-14.jpg",
-    section: "Preview",
-    title: "Open Preview mode",
-    body: "Switch to Preview to see subject + rendered HTML with sample lead data.",
+    image: "/tour/slides/13-template-cta.jpg",
+    section: "Edit templates",
+    title: "Add the call-to-action button",
+    body: "Set button text, type, and URL, then Save changes.",
     tips: [
-      "Subject shows interpolated values (e.g. Acme Labs + your brand name).",
-      "Badges show the active brand and CTA type (Landing / WhatsApp).",
+      "Button text — e.g. Book a quick call.",
+      "Button type — Landing / link, WhatsApp, or None.",
+      "Button URL — landing page or WhatsApp link.",
     ],
-    dwellMs: 6000,
+    dwellMs: 6500,
   },
   {
-    image: "/tour/slides/step-15.jpg",
+    image: "/tour/slides/14-template-preview.jpg",
     section: "Preview",
-    title: "Review the branded email",
-    body: "Confirm header, body, CTA color, and sign-off match your brand before sending campaigns.",
+    title: "Preview the branded email",
+    body: "Switch to Preview to see subject + rendered HTML with sample lead data.",
     tips: [
-      "Header uses brand name + accent color.",
+      "Subject shows interpolated values (e.g. Acme Labs + your brand).",
+      "Header, CTA color, and sign-off come from Save brand.",
       "Body replaces merge tags with sample values (Aarav / Acme Labs).",
-      "CTA button uses your accent color and button label.",
-      "Sign-off uses the Sign-off name from brand settings.",
     ],
     dwellMs: 7500,
   },
   {
-    image: "/tour/slides/step-16.jpg",
+    image: "/tour/slides/15-template-html.jpg",
     section: "HTML (optional)",
     title: "Advanced HTML mode",
     body: "Use HTML only when you need raw markup control.",
     tips: [
       "Keep {{unsubscribe_url}} and {{brand_name}} in the HTML.",
-      "Most users can stay in Visual + Preview and skip this tab.",
+      "Most users can stay in Visual + Preview.",
     ],
   },
   {
-    image: "/tour/slides/step-17.jpg",
+    image: "/tour/slides/16-leads-importer.jpg",
     section: "Leads",
-    title: "Import leads",
-    body: "Open Leads and use the smart importer for CSV, Excel, or TXT files.",
+    title: "Open Leads — smart importer",
+    body: "This is the Leads page (sidebar: Leads). Import CSV, Excel, or TXT contacts here.",
     tips: [
-      "Optional default niche is applied when the file has no niche column.",
-      "Columns are auto-detected even with messy headers.",
+      "Not Campaigns — look for Smart lead importer and Choose file to import.",
+      "Optional default niche applies when the file has no niche column.",
     ],
+    dwellMs: 6000,
   },
   {
-    image: "/tour/slides/step-18.jpg",
+    image: "/tour/slides/17-leads-import-results.jpg",
     section: "Leads",
     title: "Check import results",
-    body: "After upload, review Added / Already leads / Dupes / Invalid counts and field mapping.",
-    tips: ["Sample cleaned rows appear under the summary so you can verify mapping."],
+    body: "After upload, review Added / Already leads / Dupes / Invalid and field mapping.",
+    tips: [
+      "Green banner confirms how many new leads were imported.",
+      "Mapping chips show which CSV columns became Email / Name / Company / Niche.",
+    ],
+    dwellMs: 6000,
+  },
+  {
+    image: "/tour/slides/18-leads-directory.jpg",
+    section: "Leads",
+    title: "Lead directory",
+    body: "Scroll down to browse cleaned contacts ready for campaigns.",
+    tips: ["Use the directory to confirm names, companies, and niches after import."],
+  },
+  {
+    image: "/tour/slides/19-crm-board.jpg",
+    section: "CRM",
+    title: "CRM board",
+    body: "This is the CRM page (sidebar: CRM). Move replies across Contacted → Discussed → Done.",
+    tips: [
+      "Not Campaigns — you should see the Kanban columns Contacted / Discussed / Done.",
+      "Use search and niche/priority filters to focus.",
+    ],
     dwellMs: 5500,
   },
   {
-    image: "/tour/slides/step-19.jpg",
-    section: "CRM",
-    title: "Work replies on the CRM board",
-    body: "Move conversations across Contacted → Discussed → Done.",
-    tips: ["Use search and filters to focus by niche or priority."],
-  },
-  {
-    image: "/tour/slides/step-20.jpg",
+    image: "/tour/slides/20-crm-drawer.jpg",
     section: "CRM",
     title: "Open a lead drawer",
-    body: "Click Open on a card to edit notes, stage, priority, deal value, and follow-up date.",
-    tips: ["Save changes in the drawer to keep the pipeline up to date."],
-    dwellMs: 5500,
+    body: "Click Open on a CRM card to edit notes, stage, priority, deal value, and follow-up.",
+    tips: [
+      "Drawer shows lead name, email, company, Notes, and Premium fields.",
+      "This is not a campaign screen — Save changes updates the CRM entry.",
+    ],
+    dwellMs: 6500,
   },
   {
-    image: "/tour/slides/step-21.jpg",
+    image: "/tour/slides/21-settings-account.jpg",
     section: "Account",
     title: "Change password or login email",
     body: "In Settings → Account security you can update password or change the login email.",
@@ -282,7 +286,6 @@ export function ProductTour({ autoOpen = true }: { autoOpen?: boolean }) {
     return () => window.clearTimeout(t);
   }, [open, playing, index]);
 
-  // Prefetch nearby slides for snappy Next
   React.useEffect(() => {
     if (!open) return;
     [index, index + 1, index + 2].forEach((i) => {
@@ -327,8 +330,8 @@ export function ProductTour({ autoOpen = true }: { autoOpen?: boolean }) {
               How to use Trishulhub Leads
             </h2>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Detailed guided tour with extra steps for email brand setup and template edit/preview.
-              Lightweight screenshots only — no heavy video.
+              Step-by-step screenshots for login, reset password, email brand, templates,
+              lead import, CRM, and account settings. Lightweight images only.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
