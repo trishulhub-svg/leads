@@ -26,6 +26,8 @@ export type CtaType = (typeof CTA_TYPES)[number];
 
 export const CRM_STAGES = ["contacted", "discussed", "done", "wasted"] as const;
 export type CrmStage = (typeof CRM_STAGES)[number];
+export const CRM_PRIORITIES = ["low", "normal", "high"] as const;
+export type CrmPriority = (typeof CRM_PRIORITIES)[number];
 
 export const REPLY_CLASS = ["positive", "negative", "bounce", "autoreply", "neutral"] as const;
 export type ReplyClass = (typeof REPLY_CLASS)[number];
@@ -244,6 +246,12 @@ export const crmEntries = sqliteTable(
     sentEmailId: integer("sent_email_id").references(() => sentEmails.id),
     stage: text("stage", { enum: CRM_STAGES }).notNull().default("contacted"),
     notes: text("notes"),
+    /** Premium: opportunity size in whole currency units (e.g. INR). */
+    dealValue: integer("deal_value"),
+    /** Premium: focus ranking. */
+    priority: text("priority", { enum: CRM_PRIORITIES }).notNull().default("normal"),
+    /** Premium: next follow-up due date. */
+    followUpAt: integer("follow_up_at", { mode: "timestamp" }),
     firstRepliedAt: integer("first_replied_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$onUpdateFn(() => new Date()),
   },
@@ -251,6 +259,7 @@ export const crmEntries = sqliteTable(
     // One CRM entry per lead.
     leadIdx: uniqueIndex("crm_lead_idx").on(t.leadId),
     stageIdx: index("crm_stage_idx").on(t.stage),
+    followUpIdx: index("crm_follow_up_idx").on(t.followUpAt),
   })
 );
 
