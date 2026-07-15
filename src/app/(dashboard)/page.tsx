@@ -3,8 +3,10 @@ import { eq, sql, desc } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Eye, MessageSquare, Trophy, Users, Send, KanbanSquare } from "lucide-react";
-import { fmtNum, timeAgo } from "@/lib/utils";
+import { Mail, Eye, MessageSquare, Trophy, Users, Send, KanbanSquare, Activity, ArrowUpRight } from "lucide-react";
+import { timeAgo } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
 
 export const dynamic = "force-dynamic";
 
@@ -48,96 +50,125 @@ export default async function DashboardPage() {
   const replyRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Overview of your lead generation and email activity.</p>
-      </div>
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="Command center"
+        icon={Activity}
+        title="Good to see you."
+        description="A clear view of your outreach performance, conversations, and pipeline health."
+      />
 
       {/* Primary metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricTile icon={Mail} label="Emails Sent" value={sent} accent="primary" />
-        <MetricTile icon={Eye} label="Opens" value={opened} sub={sent > 0 ? `${openRate}% open rate` : undefined} accent="blue" />
-        <MetricTile icon={MessageSquare} label="Replies" value={replied} sub={sent > 0 ? `${replyRate}% reply rate` : undefined} accent="indigo" />
-        <MetricTile icon={Trophy} label="Converted (Done)" value={converted} accent="emerald" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={Mail} label="Emails sent" value={sent} detail="Total delivered outreach" />
+        <StatCard icon={Eye} label="Email opens" value={opened} detail={sent > 0 ? `${openRate}% open rate` : "Awaiting first campaign"} tone="info" />
+        <StatCard icon={MessageSquare} label="Replies" value={replied} detail={sent > 0 ? `${replyRate}% reply rate` : "Conversations appear here"} tone="violet" />
+        <StatCard icon={Trophy} label="Converted" value={converted} detail="CRM opportunities won" tone="success" />
       </div>
 
       {/* Secondary metrics */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricTile icon={Users} label="Raw Leads" value={leads} accent="slate" />
-        <MetricTile icon={KanbanSquare} label="In CRM" value={crm} accent="amber" />
-        <MetricTile icon={Send} label="Campaigns" value={totalCampaigns} sub={activeCampaigns > 0 ? `${activeCampaigns} sending` : undefined} accent="violet" />
-      </div>
-
-      {/* Recent replies */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Replies</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentReplies.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No replies yet. Replies appear here automatically once your campaigns start getting responses.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {recentReplies.map((r, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0 last:pb-0">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{r.fromEmail}</p>
-                    <p className="truncate text-xs text-muted-foreground">{r.subject || "(no subject)"}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <ReplyBadge classification={r.classification} />
-                    <span className="text-xs text-muted-foreground">{timeAgo(r.receivedAt)}</span>
-                  </div>
-                </div>
-              ))}
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.65fr]">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/60 pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pipeline snapshot</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Current workspace inventory</p>
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-1 p-3">
+            <SnapshotRow icon={Users} label="Raw leads" value={leads} tone="primary" />
+            <SnapshotRow icon={KanbanSquare} label="Active in CRM" value={crm} tone="warning" />
+            <SnapshotRow
+              icon={Send}
+              label="Campaigns"
+              value={totalCampaigns}
+              detail={activeCampaigns > 0 ? `${activeCampaigns} sending now` : "No active sends"}
+              tone="violet"
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/60 pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent replies</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Latest conversations across campaigns</p>
+              </div>
+              <Badge variant="outline">{recentReplies.length} latest</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3">
+            {recentReplies.length === 0 ? (
+              <div className="flex min-h-48 flex-col items-center justify-center rounded-lg bg-muted/20 px-6 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <p className="mt-3 text-sm font-semibold">Your inbox is quiet</p>
+                <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+                  Replies will appear automatically as prospects respond to your outreach.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {recentReplies.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/30">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-xs font-bold">
+                        {r.fromEmail.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{r.fromEmail}</p>
+                        <p className="truncate text-xs text-muted-foreground">{r.subject || "(no subject)"}</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <ReplyBadge classification={r.classification} />
+                      <span className="hidden text-[11px] text-muted-foreground sm:inline">{timeAgo(r.receivedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-function MetricTile({
+function SnapshotRow({
   icon: Icon,
   label,
   value,
-  sub,
-  accent,
+  detail,
+  tone,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
-  sub?: string;
-  accent: "primary" | "blue" | "indigo" | "emerald" | "slate" | "amber" | "violet";
+  detail?: string;
+  tone: "primary" | "warning" | "violet";
 }) {
-  const colors: Record<string, string> = {
+  const colors = {
     primary: "bg-primary/10 text-primary",
-    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    indigo: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
-    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    slate: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
-    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    warning: "bg-warning/10 text-warning",
     violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   };
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-            <p className="mt-1 text-3xl font-bold">{fmtNum(value)}</p>
-            {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
-          </div>
-          <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${colors[accent]}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/30">
+      <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${colors[tone]}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail || "Ready for action"}</p>
+      </div>
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+    </div>
   );
 }
 

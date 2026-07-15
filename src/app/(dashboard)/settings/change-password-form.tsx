@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert } from "@/components/ui/alert";
 
 export function ChangePasswordForm() {
   const [state, setState] = React.useState<{ loading: boolean; error?: string; ok?: boolean }>({ loading: false });
@@ -47,7 +48,7 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3">
+    <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="current" className="text-xs">Current password</Label>
         <Input id="current" name="current" type="password" required />
@@ -60,9 +61,9 @@ export function ChangePasswordForm() {
         <Label htmlFor="confirm" className="text-xs">Confirm new password</Label>
         <Input id="confirm" name="confirm" type="password" required minLength={8} />
       </div>
-      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
-      {state.ok && <p className="text-sm text-emerald-600 dark:text-emerald-400">Password changed. Redirecting to login…</p>}
-      <Button type="submit" disabled={state.loading} size="sm">
+      {state.error && <Alert variant="error">{state.error}</Alert>}
+      {state.ok && <Alert variant="success">Password changed. Redirecting to login…</Alert>}
+      <Button type="submit" disabled={state.loading} className="w-full sm:w-auto">
         {state.loading && <Loader2 className="h-4 w-4 animate-spin" />}
         Update password
       </Button>

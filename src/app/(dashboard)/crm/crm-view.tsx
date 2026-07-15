@@ -1,11 +1,14 @@
 // src/app/(dashboard)/crm/crm-view.tsx
 "use client";
 import * as React from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, MessageSquare } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { cn, timeAgo } from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
 
 type Stage = "contacted" | "discussed" | "done" | "wasted";
 
@@ -23,10 +26,10 @@ type Entry = {
 };
 
 const STAGES: { key: Stage; label: string; color: string }[] = [
-  { key: "contacted", label: "Contacted", color: "border-l-blue-500" },
-  { key: "discussed", label: "Discussed", color: "border-l-amber-500" },
-  { key: "done", label: "Done", color: "border-l-emerald-500" },
-  { key: "wasted", label: "Wasted", color: "border-l-rose-500" },
+  { key: "contacted", label: "Contacted", color: "border-l-primary" },
+  { key: "discussed", label: "Discussed", color: "border-l-warning" },
+  { key: "done", label: "Done", color: "border-l-success" },
+  { key: "wasted", label: "Wasted", color: "border-l-destructive" },
 ];
 
 export function CrmView({ initialEntries }: { initialEntries: Entry[] }) {
@@ -80,43 +83,44 @@ export function CrmView({ initialEntries }: { initialEntries: Entry[] }) {
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed py-20 text-center text-muted-foreground">
-        <p className="text-sm">
-          No leads in the CRM yet. Leads appear here automatically when they reply to your campaigns.
-        </p>
-      </div>
+      <EmptyState
+        icon={MessageSquare}
+        title="No conversations yet"
+        description="Qualified leads will appear here automatically when they reply to your campaigns."
+      />
     );
   }
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="relative max-w-xs">
+      <div className="flex flex-col gap-3 rounded-xl border bg-card/80 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search leads…"
+            aria-label="Search CRM leads"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
           />
         </div>
-        <div className="flex rounded-md border p-0.5">
-          <Button size="sm" variant={view === "kanban" ? "default" : "ghost"} onClick={() => setView("kanban")}>
+        <div className="flex rounded-xl border bg-muted/30 p-1">
+          <Button size="sm" variant={view === "kanban" ? "default" : "ghost"} onClick={() => setView("kanban")} aria-pressed={view === "kanban"}>
             Kanban
           </Button>
-          <Button size="sm" variant={view === "list" ? "default" : "ghost"} onClick={() => setView("list")}>
+          <Button size="sm" variant={view === "list" ? "default" : "ghost"} onClick={() => setView("list")} aria-pressed={view === "list"}>
             List
           </Button>
         </div>
       </div>
 
       {view === "kanban" ? (
-        <div className="grid gap-4 lg:grid-cols-4">
+        <div className="flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-4 lg:overflow-visible lg:pb-0">
           {STAGES.map((col) => {
             const colEntries = filtered.filter((e) => e.stage === col.key);
             return (
-              <div key={col.key} className="space-y-2">
+              <div key={col.key} className="w-[82vw] max-w-sm shrink-0 snap-start space-y-2 sm:w-80 lg:w-auto lg:max-w-none">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-sm font-semibold">{col.label}</span>
                   <Badge variant="secondary">{colEntries.length}</Badge>
@@ -133,9 +137,7 @@ export function CrmView({ initialEntries }: { initialEntries: Entry[] }) {
                     />
                   ))}
                   {colEntries.length === 0 && (
-                    <div className="rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground">
-                      Empty
-                    </div>
+                    <EmptyState icon={MessageSquare} title="No leads" compact />
                   )}
                 </div>
               </div>
@@ -166,7 +168,7 @@ function KanbanCard({
   const [notes, setNotes] = React.useState(entry.notes || "");
 
   return (
-    <div className={cn("rounded-md border border-l-4 bg-card p-3 shadow-sm", color)}>
+    <div className={cn("rounded-xl border border-l-[3px] bg-card p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md", color)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{entry.firstName || entry.email}</p>
@@ -178,10 +180,10 @@ function KanbanCard({
 
       {editingNotes ? (
         <div className="mt-2 space-y-1">
-          <textarea
+          <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full rounded border bg-background p-1.5 text-xs"
+            className="min-h-20 text-xs"
             rows={2}
             placeholder="Add a note…"
           />
@@ -189,7 +191,7 @@ function KanbanCard({
             <Button
               size="sm"
               variant="outline"
-              className="h-6 text-xs"
+              className="h-8 text-xs"
               onClick={async () => {
                 const ok = await onSaveNotes(entry.id, notes);
                 if (ok) setEditingNotes(false);
@@ -197,7 +199,7 @@ function KanbanCard({
             >
               Save
             </Button>
-            <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setEditingNotes(false)}>
+            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingNotes(false)}>
               Cancel
             </Button>
           </div>
@@ -215,25 +217,25 @@ function KanbanCard({
         {entry.stage !== "done" && entry.stage !== "wasted" && (
           <>
             {entry.stage === "contacted" && (
-              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => onMove(entry.id, "discussed")}>
+              <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => onMove(entry.id, "discussed")}>
                 → Discussed
               </Button>
             )}
-            <Button size="sm" variant="outline" className="h-6 px-2 text-xs text-emerald-600" onClick={() => onMove(entry.id, "done")}>
+            <Button size="sm" variant="outline" className="h-8 px-2 text-xs text-success" onClick={() => onMove(entry.id, "done")}>
               ✓ Done
             </Button>
-            <Button size="sm" variant="outline" className="h-6 px-2 text-xs text-destructive" onClick={() => onMove(entry.id, "wasted")}>
+            <Button size="sm" variant="outline" className="h-8 px-2 text-xs text-destructive" onClick={() => onMove(entry.id, "wasted")}>
               ✗ Wasted
             </Button>
           </>
         )}
         {(entry.stage === "done" || entry.stage === "wasted") && (
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => onMove(entry.id, "contacted")}>
+          <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => onMove(entry.id, "contacted")}>
             ↩ Reopen
           </Button>
         )}
       </div>
-      <p className="mt-1.5 text-[10px] text-muted-foreground">Replied {timeAgo(entry.firstRepliedAt)}</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Replied {timeAgo(entry.firstRepliedAt)}</p>
     </div>
   );
 }
@@ -248,7 +250,8 @@ function ListView({
   updating: number | null;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-xl border bg-card/90 shadow-sm">
+      <div className="hidden md:block">
       <table className="w-full text-sm">
         <thead className="border-b bg-muted/50">
           <tr>
@@ -274,22 +277,54 @@ function ListView({
               <td className="p-3">
                 <div className="flex items-center justify-end gap-1">
                   {updating === entry.id && <Loader2 className="h-3 w-3 animate-spin" />}
-                  <select
+                  <Select
                     value={entry.stage}
                     onChange={(e) => onMove(entry.id, e.target.value as Stage)}
-                    className="h-7 rounded border bg-background px-2 text-xs"
+                    className="h-8 w-32 text-xs"
                   >
                     <option value="contacted">Contacted</option>
                     <option value="discussed">Discussed</option>
                     <option value="done">Done</option>
                     <option value="wasted">Wasted</option>
-                  </select>
+                  </Select>
                 </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
+      <div className="divide-y divide-border/60 md:hidden">
+        {entries.map((entry) => (
+          <div key={entry.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{entry.firstName || entry.email}</p>
+                <p className="truncate text-xs text-muted-foreground">{entry.email}</p>
+                {entry.company && <p className="mt-1 truncate text-xs text-muted-foreground">{entry.company}</p>}
+              </div>
+              <StageBadge stage={entry.stage} />
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground">Replied {timeAgo(entry.firstRepliedAt)}</span>
+              <div className="flex items-center gap-1.5">
+                {updating === entry.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                <Select
+                  aria-label={`Move ${entry.email} to stage`}
+                  value={entry.stage}
+                  onChange={(e) => onMove(entry.id, e.target.value as Stage)}
+                  className="h-9 w-32 text-xs"
+                >
+                  <option value="contacted">Contacted</option>
+                  <option value="discussed">Discussed</option>
+                  <option value="done">Done</option>
+                  <option value="wasted">Wasted</option>
+                </Select>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

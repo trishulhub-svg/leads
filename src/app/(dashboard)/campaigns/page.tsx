@@ -2,6 +2,8 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { CampaignsView } from "./campaigns-view";
+import { PageHeader } from "@/components/page-header";
+import { Send } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +25,13 @@ export default async function CampaignsPage() {
   }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Campaigns</h1>
-        <p className="text-sm text-muted-foreground">
-          Pick a template, select your leads, and send. Emails are load-balanced across your 8 SMTPs.
-        </p>
-      </div>
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="Outreach operations"
+        icon={Send}
+        title="Campaign control room"
+        description="Build focused outreach, distribute delivery safely across your SMTP pool, and track every response."
+      />
 
       <CampaignsView initialCampaigns={safeCampaigns} templates={templates} leadCount={rawCountRow[0]?.count ?? 0} />
     </div>

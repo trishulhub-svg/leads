@@ -7,19 +7,22 @@ import {
   Upload,
   Trash2,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
   Inbox,
   MapPin,
   Sparkles,
   Building2,
   ExternalLink,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { Select } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { timeAgo } from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
 
 type Lead = {
   id: number;
@@ -70,6 +73,7 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
   const [discovered, setDiscovered] = React.useState<DiscoveredBusiness[]>([]);
   const [resolvedLocation, setResolvedLocation] = React.useState("");
   const [aiUsed, setAiUsed] = React.useState(false);
+  const searchController = React.useRef<AbortController | null>(null);
 
   async function discover() {
     if (!location.trim() || !category.trim()) return;
@@ -111,10 +115,20 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
   async function search(q: string) {
     setQuery(q);
     setLoading(true);
-    const res = await fetch(`/api/leads?q=${encodeURIComponent(q)}&limit=100`);
-    const data = await res.json();
-    setLeads(data.leads || []);
-    setLoading(false);
+    searchController.current?.abort();
+    const controller = new AbortController();
+    searchController.current = controller;
+    try {
+      const res = await fetch(`/api/leads?q=${encodeURIComponent(q)}&limit=100`, { signal: controller.signal });
+      const data = await res.json();
+      setLeads(data.leads || []);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setResult({ ok: false, msg: "Could not search leads. Please try again." });
+      }
+    } finally {
+      if (searchController.current === controller) setLoading(false);
+    }
   }
 
   async function doScrape() {
@@ -191,16 +205,17 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
   return (
     <div className="space-y-4">
       {/* Guided location discovery */}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="border-b bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5">
+      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-card/95 shadow-[0_16px_50px_rgba(79,70,229,0.08)]">
+        <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-br from-primary/[0.12] via-primary/[0.05] to-violet-500/[0.04] p-5 sm:p-6">
+          <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-indigo-600 text-primary-foreground shadow-lg shadow-primary/20">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold">Discover businesses near you</h2>
-                <Badge variant="secondary">India</Badge>
+                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Discover businesses near you</h2>
+                <Badge variant="outline" className="bg-card/60">India · Live search</Badge>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 No website link needed. Choose a location, business type, and radius. We find verified map listings,
@@ -209,8 +224,8 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
             </div>
           </div>
         </div>
-        <div className="p-5">
-          <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_150px_auto]">
+        <div className="p-5 sm:p-6">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_150px_auto]">
             <div>
               <label htmlFor="discovery-location" className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 City, locality, or PIN code
@@ -251,22 +266,21 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
               <label htmlFor="discovery-radius" className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Search radius
               </label>
-              <select
+              <Select
                 id="discovery-radius"
                 value={radiusKm}
                 onChange={(event) => setRadiusKm(event.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {[2, 5, 10, 20, 30, 50].map((radius) => (
                   <option key={radius} value={radius}>
                     {radius} km
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="flex items-end">
               <Button
-                className="w-full md:w-auto"
+                className="w-full px-5 lg:w-auto"
                 onClick={discover}
                 disabled={discovering || !location.trim() || !category.trim()}
               >
@@ -291,7 +305,7 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
       </div>
 
       {discovered.length > 0 && (
-        <div className="rounded-xl border bg-card">
+        <div className="overflow-hidden rounded-xl border bg-card/95 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
             <div>
               <h3 className="text-sm font-semibold">Discovery results</h3>
@@ -303,9 +317,9 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
               </Badge>
             )}
           </div>
-          <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-3">
             {discovered.map((business) => (
-              <div key={business.id} className="min-w-0 bg-card p-4">
+              <div key={business.id} className="group min-w-0 bg-card p-4 transition-colors hover:bg-muted/25">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{business.name}</p>
@@ -351,19 +365,27 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
       {/* Acquisition tools */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Scrape */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="rounded-xl border bg-card/90 p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Already have a website?</h3>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Globe className="h-4 w-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold">Scan a known website</h3>
+              <p className="text-xs text-muted-foreground">Extract public contacts from a specific page.</p>
+            </div>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="scrape-url" className="text-xs">Website URL</Label>
             <Input
+              id="scrape-url"
               placeholder="https://example.com/contact"
               value={scrapeUrl}
               onChange={(e) => setScrapeUrl(e.target.value)}
             />
             <div className="flex gap-2">
               <Input
+                aria-label="Lead niche"
                 placeholder="Niche (optional)"
                 value={scrapeNiche}
                 onChange={(e) => setScrapeNiche(e.target.value)}
@@ -378,23 +400,31 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
         </div>
 
         {/* Import */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="rounded-xl border bg-card/90 p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
-            <Upload className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Import from file</h3>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+              <Upload className="h-4 w-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold">Import your own list</h3>
+              <p className="text-xs text-muted-foreground">Bring contacts from CSV, XLSX, or TXT.</p>
+            </div>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="import-niche" className="text-xs">Default niche</Label>
             <Input
+              id="import-niche"
               placeholder="Niche (optional, applies to scrape + import)"
               value={scrapeNiche}
               onChange={(e) => setScrapeNiche(e.target.value)}
             />
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.txt" onChange={doImport} className="hidden" />
+            <input id="lead-file-import" ref={fileRef} type="file" accept=".csv,.xlsx,.txt" onChange={doImport} className="hidden" aria-label="Import lead file" />
             <Button
               variant="outline"
               className="w-full"
               onClick={() => fileRef.current?.click()}
               disabled={importing}
+              aria-controls="lead-file-import"
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Choose CSV / Excel / TXT
@@ -408,24 +438,20 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
 
       {/* Result banner */}
       {result && (
-        <div
-          className={`flex items-start gap-2 rounded-md p-3 text-sm ${
-            result.ok
-              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-              : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {result.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-          <span>{result.msg}</span>
-        </div>
+        <Alert variant={result.ok ? "success" : "error"}>{result.msg}</Alert>
       )}
 
       {/* Search + table */}
-      <div className="rounded-lg border bg-card">
-        <div className="border-b p-3">
-          <div className="relative max-w-sm">
+      <div className="overflow-hidden rounded-xl border bg-card/95 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Lead directory</h3>
+            <p className="text-xs text-muted-foreground">Your latest 100 outreach-ready contacts</p>
+          </div>
+          <div className="relative w-full sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              aria-label="Search leads"
               placeholder="Search email, name, company…"
               value={query}
               onChange={(e) => search(e.target.value)}
@@ -435,11 +461,15 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
         </div>
 
         {leads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
-            <Inbox className="h-8 w-8" />
-            <p className="text-sm">{loading ? "Loading…" : "No leads yet. Discover nearby businesses or import a file above."}</p>
-          </div>
+          <EmptyState
+            icon={Inbox}
+            title={loading ? "Searching your leads…" : "No leads in your directory"}
+            description={loading ? "This will only take a moment." : "Discover nearby businesses or import a contact list to begin."}
+            className="m-4 border-0"
+          />
         ) : (
+          <>
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -455,7 +485,7 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
             <TableBody>
               {leads.map((lead) => (
                 <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.email}</TableCell>
+                  <TableCell className="max-w-[16rem] truncate font-medium" title={lead.email}>{lead.email}</TableCell>
                   <TableCell className="text-muted-foreground">{lead.firstName || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{lead.company || "—"}</TableCell>
                   <TableCell>
@@ -471,6 +501,7 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
                       variant="ghost"
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => deleteLead(lead.id)}
+                      aria-label={`Delete ${lead.email}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -479,6 +510,39 @@ export function LeadsView({ initialLeads }: { initialLeads: Lead[] }) {
               ))}
             </TableBody>
           </Table>
+          </div>
+          <div className="divide-y divide-border/60 md:hidden">
+            {leads.map((lead) => (
+              <div key={lead.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{lead.email}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {[lead.firstName, lead.company].filter(Boolean).join(" · ") || "No additional details"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {lead.niche && <Badge variant="secondary">{lead.niche}</Badge>}
+                      <Badge variant="outline" className="capitalize">{lead.source}</Badge>
+                      <span className="text-[11px] text-muted-foreground">{timeAgo(lead.createdAt)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteLead(lead.id)}
+                    aria-label={`Delete ${lead.email}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
     </div>

@@ -2,63 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn-standard HSL design tokens — slate base, blue accent.
-   Chosen so the brand blue stays legible in both light and dark. */
+/* Trishulhub operator UI — calm cobalt, layered neutral surfaces, semantic status. */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 220 33% 98%;
+    --foreground: 224 39% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 224 39% 12%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 226 72% 52%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 222 32% 94%;
+    --secondary-foreground: 224 39% 16%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 220 27% 95%;
+    --muted-foreground: 218 15% 45%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 226 55% 95%;
+    --accent-foreground: 226 72% 40%;
 
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --border: 220 24% 89%;
+    --input: 220 24% 87%;
+    --ring: 226 72% 52%;
 
-    --radius: 0.6rem;
+    --success: 154 70% 37%;
+    --success-foreground: 152 71% 22%;
+    --warning: 35 92% 50%;
+    --warning-foreground: 30 75% 25%;
+    --info: 204 88% 48%;
+    --info-foreground: 204 78% 27%;
+    --sidebar: 225 32% 13%;
+    --sidebar-foreground: 220 25% 91%;
+    --sidebar-muted: 220 14% 65%;
+    --sidebar-accent: 226 62% 58%;
+
+    --radius: 0.85rem;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
+    --background: 225 35% 7%;
+    --foreground: 220 24% 96%;
 
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 98%;
+    --card: 224 31% 10%;
+    --card-foreground: 220 24% 96%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 226 86% 68%;
+    --primary-foreground: 225 40% 10%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 223 25% 16%;
+    --secondary-foreground: 220 24% 94%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 223 25% 14%;
+    --muted-foreground: 218 15% 66%;
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 226 30% 18%;
+    --accent-foreground: 226 82% 76%;
 
     --destructive: 0 63% 45%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 217 91% 60%;
+    --border: 223 22% 19%;
+    --input: 223 22% 22%;
+    --ring: 226 86% 68%;
+
+    --success: 154 66% 48%;
+    --success-foreground: 151 67% 72%;
+    --warning: 38 92% 56%;
+    --warning-foreground: 42 90% 72%;
+    --info: 204 90% 60%;
+    --info-foreground: 201 90% 75%;
+    --sidebar: 225 40% 6%;
+    --sidebar-foreground: 220 25% 93%;
+    --sidebar-muted: 220 14% 62%;
+    --sidebar-accent: 226 86% 68%;
   }
 }
 
@@ -70,6 +91,42 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(circle at 12% -10%, hsl(var(--primary) / 0.07), transparent 30rem),
+      radial-gradient(circle at 90% 0%, hsl(265 80% 60% / 0.04), transparent 28rem);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .surface-panel {
+    @apply rounded-xl border bg-card/90 shadow-[0_1px_2px_rgba(15,23,42,0.03),0_10px_30px_rgba(15,23,42,0.035)] backdrop-blur-sm;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

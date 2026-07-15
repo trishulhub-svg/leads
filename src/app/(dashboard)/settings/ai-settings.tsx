@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Bot, CheckCircle2, KeyRound, Loader2, PlugZap } from "lucide-react";
+import { Bot, KeyRound, Loader2, PlugZap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 type PublicConfig = {
   configured: boolean;
@@ -60,29 +62,23 @@ export function AiSettings({ initial }: { initial: PublicConfig }) {
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden border-violet-500/20">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/10 dark:text-violet-400">
               <Bot className="h-5 w-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <CardTitle>DeepSeek AI</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
                 Ranks verified businesses during location-based lead discovery.
               </p>
             </div>
           </div>
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-              config.configured
-                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                : "bg-muted text-muted-foreground"
-            }`}
-          >
+          <Badge variant={config.configured ? "success" : "secondary"} className="w-fit shrink-0">
             {config.configured ? `Connected via ${config.source}` : "Not configured"}
-          </span>
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -128,18 +124,7 @@ export function AiSettings({ initial }: { initial: PublicConfig }) {
           </p>
         </div>
 
-        {message && (
-          <div
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-              message.ok
-                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                : "bg-destructive/10 text-destructive"
-            }`}
-          >
-            {message.ok && <CheckCircle2 className="h-4 w-4 shrink-0" />}
-            {message.text}
-          </div>
-        )}
+        {message && <Alert variant={message.ok ? "success" : "error"}>{message.text}</Alert>}
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={save} disabled={saving || !baseUrl.trim() || !model.trim()}>
