@@ -5,18 +5,20 @@ import { SmtpManager } from "./smtp-manager";
 import { AiSettings } from "./ai-settings";
 import { getPublicAiConfig } from "@/lib/ai";
 import { PageHeader } from "@/components/page-header";
+import { PremiumGate } from "@/components/premium-gate";
+import { getPlanLimits } from "@/lib/plan";
 import { Bot, LockKeyhole, Mail, SlidersHorizontal } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [smtpRows, user, aiConfig] = await Promise.all([
+  const [smtpRows, user, aiConfig, plan] = await Promise.all([
     db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id),
     db.select().from(schema.users).limit(1).then((r) => r[0]),
     getPublicAiConfig(),
+    getPlanLimits(),
   ]);
 
-  // Strip secrets before sending to the client.
   const safeSmtp = smtpRows.map((r) => ({
     id: r.id,
     label: r.label,
@@ -30,6 +32,12 @@ export default async function SettingsPage() {
     fromEmail: r.fromEmail,
     dailyLimit: r.dailyLimit,
     sentToday: r.sentToday,
+    monthlyQuota: r.monthlyQuota,
+    sentThisMonth: r.sentThisMonth,
+    monthlyLeft: Math.max(0, r.monthlyQuota - r.sentThisMonth),
+    totalQuota: r.totalQuota,
+    sentTotal: r.sentTotal,
+    totalLeft: r.totalQuota == null ? null : Math.max(0, r.totalQuota - r.sentTotal),
     healthy: r.healthy,
     lastError: r.lastError,
     lastCheckedAt: r.lastCheckedAt ? r.lastCheckedAt.toISOString() : null,
@@ -51,13 +59,20 @@ export default async function SettingsPage() {
 
       <div>
         <SectionTitle icon={Bot} title="Lead intelligence" description="AI configuration for discovery relevance and enrichment." />
-        <AiSettings initial={aiConfig} />
+        {plan.leadIntelligence ? (
+          <AiSettings initial={aiConfig} />
+        ) : (
+          <PremiumGate
+            title="Lead intelligence is Premium"
+            description="Connect DeepSeek AI to rank and enrich discovered businesses. Upgrade to unlock AI settings and smarter lead scoring."
+          />
+        )}
       </div>
 
       <div className="border-t pt-8">
-        <SectionTitle icon={Mail} title="Email infrastructure" description="Primary delivery accounts and emergency failover capacity." />
+        <SectionTitle icon={Mail} title="Email infrastructure" description="Primary delivery plus emergency failover — with live quota remaining." />
       </div>
-      <SmtpManager initial={safeSmtp} />
+      <SmtpManager initial={safeSmtp} plan={plan} />
 
       <div className="border-t pt-8">
         <SectionTitle icon={LockKeyhole} title="Account security" description="Identity and password controls for this workspace." />
@@ -67,7 +82,7 @@ export default async function SettingsPage() {
               {(user?.name || "F").charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-            <p className="text-sm text-muted-foreground">Logged in as</p>
+              <p className="text-sm text-muted-foreground">Logged in as</p>
               <p className="truncate font-semibold">{user?.name}</p>
               <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>

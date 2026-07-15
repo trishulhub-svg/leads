@@ -34,6 +34,22 @@ export async function POST(req: Request) {
   if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = (await req.json().catch(() => ({}))) as TemplateInput;
 
+  const { getPlanLimits } = await import("@/lib/plan");
+  const limits = await getPlanLimits();
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(schema.templates);
+  if (Number(count) >= limits.maxTemplates) {
+    return NextResponse.json(
+      {
+        error:
+          limits.plan === "free"
+            ? "Free plan allows 1 email template. Upgrade to Premium for more templates."
+            : `Template limit reached (${limits.maxTemplates}).`,
+        upgrade: limits.plan === "free",
+      },
+      { status: 403 }
+    );
+  }
+
   const name = clean(body.name);
   const subject = clean(body.subject);
   const htmlBody = typeof body.htmlBody === "string" ? body.htmlBody : "";
@@ -57,6 +73,25 @@ export async function PUT(req: Request) {
   const body = (await req.json().catch(() => ({}))) as TemplateInput & { id?: unknown };
   const id = Number(body.id);
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { getPlanLimits, isTemplateAllowed } = await import("@/lib/plan");
+  const limits = await getPlanLimits();
+  if (limits.plan === "free") {
+    const allIds = await db
+      .select({ id: schema.templates.id })
+      .from(schema.templates)
+      .orderBy(schema.templates.id);
+    if (!isTemplateAllowed(
+      limits,
+      id,
+      allIds.map((r) => r.id)
+    )) {
+      return NextResponse.json(
+        { error: "This template is Premium. Upgrade to unlock all templates.", upgrade: true },
+        { status: 403 }
+      );
+    }
+  }
 
   const updates: Partial<typeof schema.templates.$inferInsert> = {};
   if (body.name !== undefined) {

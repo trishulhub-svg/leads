@@ -4,12 +4,13 @@ import { db, schema } from "@/lib/db";
 import { LeadsView } from "./leads-view";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { getPlanLimits } from "@/lib/plan";
 import { Database, ShieldOff, Upload, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage() {
-  const [leads, stats] = await Promise.all([
+  const [leads, stats, plan] = await Promise.all([
     db
       .select()
       .from(schema.leads)
@@ -23,6 +24,7 @@ export default async function LeadsPage() {
         total: sql<number>`count(*)`,
       })
       .from(schema.leads),
+    getPlanLimits(),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function LeadsPage() {
       </div>
 
       <LeadsView
+        plan={plan}
         initialLeads={leads.map((l) => ({
           ...l,
           createdAt: l.createdAt.toISOString(),

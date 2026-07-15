@@ -13,6 +13,7 @@ import {
   ImagePlus,
   Palette,
   Type,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,9 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { PremiumGate, PremiumChip } from "@/components/premium-gate";
+import { UPGRADE_WHATSAPP } from "@/lib/plan";
+import type { PlanLimits } from "@/lib/plan";
 import {
   compileVisualEmailHtml,
   decodeVisualMarker,
@@ -94,14 +98,18 @@ function blankDraft(): Draft {
 export function TemplatesManager({
   initialTemplates,
   initialBrand,
+  plan,
   onChanged,
 }: {
   initialTemplates: EmailTemplate[];
   initialBrand: BrandPublic;
+  plan: PlanLimits;
   onChanged?: () => void;
 }) {
   const [templates, setTemplates] = React.useState<EmailTemplate[]>(initialTemplates);
   const [brand, setBrand] = React.useState<BrandPublic>(initialBrand);
+  const freeTemplateId = templates[0]?.id ?? null;
+  const canCreateMore = templates.length < plan.maxTemplates;
   const [brandDraft, setBrandDraft] = React.useState({
     brandName: initialBrand.brandName,
     senderName: initialBrand.senderName,
@@ -122,6 +130,13 @@ export function TemplatesManager({
   const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   function blankDraftInit() {
+    if (!canCreateMore) {
+      setResult({
+        ok: false,
+        msg: plan.plan === "free" ? "Free plan allows 1 email template. Upgrade to Premium for more." : "Template limit reached.",
+      });
+      return;
+    }
     setSelectedId("new");
     setDraft(blankDraft());
     setResult(null);
@@ -129,6 +144,10 @@ export function TemplatesManager({
   }
 
   function selectTemplate(t: EmailTemplate) {
+    if (plan.plan === "free" && freeTemplateId != null && t.id !== freeTemplateId) {
+      setResult({ ok: false, msg: "This template is Premium. Upgrade to unlock all templates." });
+      return;
+    }
     setSelectedId(t.id);
     setDraft(toDraft(t));
     setResult(null);
@@ -406,17 +425,31 @@ export function TemplatesManager({
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         {/* Template list */}
         <div className="space-y-3">
-          <Button onClick={blankDraftInit} variant="outline" className="w-full justify-start">
-            <Plus className="h-4 w-4" /> New template
-          </Button>
+          {canCreateMore ? (
+            <Button onClick={blankDraftInit} variant="outline" className="w-full justify-start">
+              <Plus className="h-4 w-4" /> New template
+            </Button>
+          ) : (
+            <a
+              href={UPGRADE_WHATSAPP}
+              target="_blank"
+              rel="noreferrer"
+              className="flex w-full items-center justify-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-800 dark:text-amber-300"
+            >
+              <Lock className="h-4 w-4" /> More templates · Premium
+            </a>
+          )}
           <div className="space-y-1.5">
-            {templates.map((t) => (
+            {templates.map((t, index) => {
+              const locked = plan.plan === "free" && freeTemplateId != null && t.id !== freeTemplateId;
+              return (
               <button
                 key={t.id}
                 onClick={() => selectTemplate(t)}
                 aria-current={selectedId === t.id ? "true" : undefined}
                 className={cn(
                   "flex w-full flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-all",
+                  locked && "opacity-70",
                   selectedId === t.id
                     ? "border-primary/40 bg-primary/5 shadow-sm"
                     : "border-border bg-card/60 hover:border-primary/20 hover:bg-muted/40"
@@ -425,16 +458,27 @@ export function TemplatesManager({
                 <span className="flex w-full items-center gap-2">
                   <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate text-sm font-semibold">{t.name}</span>
+                  {locked && <PremiumChip label="Locked" />}
+                  {!locked && index === 0 && plan.plan === "free" && (
+                    <Badge variant="secondary" className="text-[10px]">Free</Badge>
+                  )}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">{t.subject}</span>
               </button>
-            ))}
+            )})}
             {selectedId === "new" && (
               <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3 text-sm font-medium text-primary">
                 <Plus className="h-3.5 w-3.5" /> New template (unsaved)
               </div>
             )}
           </div>
+          {plan.plan === "free" && templates.length > 1 && (
+            <PremiumGate
+              compact
+              title="Unlock all templates"
+              description="Free plan includes 1 editable template. Upgrade for a full template library."
+            />
+          )}
         </div>
 
         {/* Editor */}

@@ -1,7 +1,7 @@
 // src/app/(dashboard)/settings/smtp-manager.tsx
 "use client";
 import * as React from "react";
-import { Plus, Trash2, Plug, Loader2, CheckCircle2, XCircle, ShieldAlert, Server, X } from "lucide-react";
+import { Plus, Trash2, Plug, Loader2, CheckCircle2, XCircle, ShieldAlert, Server, X, Lock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { PremiumGate, PremiumChip } from "@/components/premium-gate";
+import type { PlanLimits } from "@/lib/plan";
+import { UPGRADE_WHATSAPP } from "@/lib/plan";
 
 type SmtpRow = {
   id: number;
@@ -24,6 +27,12 @@ type SmtpRow = {
   fromEmail: string;
   dailyLimit: number;
   sentToday: number;
+  monthlyQuota: number;
+  sentThisMonth: number;
+  monthlyLeft: number;
+  totalQuota: number | null;
+  sentTotal: number;
+  totalLeft: number | null;
   healthy: boolean;
   lastError: string | null;
   lastCheckedAt: string | null;
@@ -34,18 +43,20 @@ type SmtpRow = {
   hasImapPassword: boolean;
 };
 
-export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
+export function SmtpManager({ initial, plan }: { initial: SmtpRow[]; plan: PlanLimits }) {
   const [configs, setConfigs] = React.useState<SmtpRow[]>(initial);
   const [editing, setEditing] = React.useState<SmtpRow | "new-primary" | "new-emergency" | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [planState, setPlanState] = React.useState(plan);
 
-  // Refresh from server after mutations.
   React.useEffect(() => {
     let active = true;
     fetch("/api/smtp")
       .then((r) => r.json())
       .then((d) => {
-        if (active && d.configs) setConfigs(d.configs);
+        if (!active) return;
+        if (d.configs) setConfigs(d.configs);
+        if (d.plan) setPlanState(d.plan);
       })
       .catch(() => {});
     return () => {
@@ -54,9 +65,11 @@ export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
   }, [refreshKey]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
-
   const primary = configs.filter((c) => c.role === "primary");
   const emergency = configs.filter((c) => c.role === "emergency");
+  const canAddPrimary = primary.length < planState.maxPrimarySmtp;
+  const canAddEmergency = emergency.length < planState.maxEmergencySmtp;
+  const showPremiumSmtpUpsell = planState.plan === "free";
 
   async function handleDelete(id: number) {
     if (!confirm("Delete this SMTP configuration?")) return;
@@ -71,45 +84,59 @@ export function SmtpManager({ initial }: { initial: SmtpRow[] }) {
 
   return (
     <div className="space-y-6">
-      {/* Pool summary */}
       <div className="grid gap-3 sm:grid-cols-2">
         <PoolSummary
-          title="Primary SMTPs"
-          subtitle="Main sending pool — round-robin load balanced"
+          title="Primary SMTP"
+          subtitle={planState.plan === "free" ? "Free plan · 1 primary included" : "Main sending pool — round-robin"}
           total={primary.length}
-          healthy={primary.filter((c) => c.healthy && c.sentToday < c.dailyLimit).length}
+          healthy={primary.filter((c) => c.healthy).length}
           accent="primary"
         />
         <PoolSummary
-          title="Emergency SMTPs"
-          subtitle="Failover pool — used when all Primaries hit limits"
+          title="Emergency SMTP"
+          subtitle={planState.plan === "free" ? "Free plan · 1 failover included" : "Failover when primaries are exhausted"}
           total={emergency.length}
-          healthy={emergency.filter((c) => c.healthy && c.sentToday < c.dailyLimit).length}
+          healthy={emergency.filter((c) => c.healthy).length}
           accent="amber"
         />
       </div>
 
-      {/* Primary list */}
       <SmtpList
-        title="Primary (4 max)"
+        title={`Primary (${planState.maxPrimarySmtp} max on ${planState.plan})`}
         rows={primary}
         accent="primary"
         onEdit={(r) => setEditing(r)}
         onDelete={handleDelete}
-        onAdd={primary.length < 4 ? () => setEditing("new-primary") : undefined}
+        onAdd={canAddPrimary ? () => setEditing("new-primary") : undefined}
         addLabel="Add Primary SMTP"
+        lockedAdd={
+          !canAddPrimary && showPremiumSmtpUpsell
+            ? { href: UPGRADE_WHATSAPP, label: "More primary SMTPs" }
+            : undefined
+        }
       />
 
-      {/* Emergency list */}
       <SmtpList
-        title="Emergency (4 max)"
+        title={`Emergency (${planState.maxEmergencySmtp} max on ${planState.plan})`}
         rows={emergency}
         accent="amber"
         onEdit={(r) => setEditing(r)}
         onDelete={handleDelete}
-        onAdd={emergency.length < 4 ? () => setEditing("new-emergency") : undefined}
+        onAdd={canAddEmergency ? () => setEditing("new-emergency") : undefined}
         addLabel="Add Emergency SMTP"
+        lockedAdd={
+          !canAddEmergency && showPremiumSmtpUpsell
+            ? { href: UPGRADE_WHATSAPP, label: "More emergency SMTPs" }
+            : undefined
+        }
       />
+
+      {showPremiumSmtpUpsell && (
+        <PremiumGate
+          title="Smart SMTP pool & higher volume"
+          description="Unlock up to 4 primary + 4 emergency SMTPs, smarter load balancing across providers, and higher sending capacity when you need to scale."
+        />
+      )}
 
       {editing && (
         <SmtpEditor
@@ -153,7 +180,7 @@ function PoolSummary({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <p className="font-semibold">{title}</p>
-            <Badge variant={healthy > 0 ? "success" : "destructive"}>
+            <Badge variant={healthy > 0 ? "success" : total === 0 ? "secondary" : "destructive"}>
               {healthy}/{total} healthy
             </Badge>
           </div>
@@ -172,6 +199,7 @@ function SmtpList({
   onDelete,
   onAdd,
   addLabel,
+  lockedAdd,
 }: {
   title: string;
   rows: SmtpRow[];
@@ -180,16 +208,30 @@ function SmtpList({
   onDelete: (id: number) => void;
   onAdd?: () => void;
   addLabel: string;
+  lockedAdd?: { href: string; label: string };
 }) {
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
-        {onAdd && (
-          <Button size="sm" variant="outline" onClick={onAdd}>
-            <Plus className="h-4 w-4" /> {addLabel}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onAdd && (
+            <Button size="sm" variant="outline" onClick={onAdd}>
+              <Plus className="h-4 w-4" /> {addLabel}
+            </Button>
+          )}
+          {lockedAdd && (
+            <a
+              href={lockedAdd.href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-800 dark:text-amber-300"
+            >
+              <Lock className="h-3.5 w-3.5" /> {lockedAdd.label}
+              <PremiumChip />
+            </a>
+          )}
+        </div>
       </div>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -202,6 +244,34 @@ function SmtpList({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function QuotaBar({
+  label,
+  used,
+  total,
+  left,
+}: {
+  label: string;
+  used: number;
+  total: number;
+  left: number;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+  const tone = left <= 0 ? "bg-destructive" : pct >= 85 ? "bg-amber-500" : "bg-primary";
+  return (
+    <div className="min-w-[9rem] flex-1">
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span className="tabular-nums text-foreground">
+          {left.toLocaleString()} left · {used.toLocaleString()}/{total.toLocaleString()}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -231,8 +301,8 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
     <Card className="transition-all duration-200 hover:border-primary/20 hover:shadow-md">
       <CardContent className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
               <span className="font-medium">{row.label}</span>
               {row.healthy ? (
                 <Badge variant="success" className="gap-1">
@@ -247,17 +317,24 @@ function SmtpCard({ row, onEdit, onDelete }: { row: SmtpRow; onEdit: () => void;
             <p className="truncate text-sm text-muted-foreground">
               {row.user}@{row.host}:{row.port} · {row.fromName} &lt;{row.fromEmail}&gt;
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sent today: {row.sentToday}/{row.dailyLimit}
-              {row.imapHost && <span className="ml-2">· IMAP: {row.imapHost}</span>}
-            </p>
+            <div className="flex flex-wrap gap-3 rounded-xl border bg-muted/20 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Gauge className="h-3.5 w-3.5" /> Quota
+              </div>
+              <QuotaBar label="Today" used={row.sentToday} total={row.dailyLimit} left={Math.max(0, row.dailyLimit - row.sentToday)} />
+              <QuotaBar label="This month" used={row.sentThisMonth} total={row.monthlyQuota} left={row.monthlyLeft} />
+              {row.totalQuota != null && row.totalLeft != null && (
+                <QuotaBar label="Total" used={row.sentTotal} total={row.totalQuota} left={row.totalLeft} />
+              )}
+            </div>
+            {row.imapHost && <p className="text-xs text-muted-foreground">IMAP: {row.imapHost}</p>}
             {row.lastError && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+              <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                 <ShieldAlert className="h-3 w-3" /> {row.lastError}
               </p>
             )}
             {testResult && (
-              <Alert variant={testResult.ok ? "success" : "error"} className="mt-2 py-2 text-xs">
+              <Alert variant={testResult.ok ? "success" : "error"} className="py-2 text-xs">
                 {testResult.msg}
               </Alert>
             )}
@@ -345,6 +422,8 @@ function SmtpEditor({
       fromName: fd.get("fromName"),
       fromEmail: fd.get("fromEmail"),
       dailyLimit: fd.get("dailyLimit"),
+      monthlyQuota: fd.get("monthlyQuota"),
+      totalQuota: fd.get("totalQuota"),
       imapHost: fd.get("imapHost"),
       imapPort: fd.get("imapPort"),
       imapUser: fd.get("imapUser"),
@@ -383,7 +462,7 @@ function SmtpEditor({
           <div className="flex items-center justify-between">
             <div>
               <CardTitle id={headingId}>{isEdit ? "Edit SMTP connection" : "Add SMTP connection"}</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">Secure outbound delivery and optional reply monitoring.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Set provider quotas so remaining capacity stays visible here.</p>
             </div>
             <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close SMTP editor">
               <X className="h-4 w-4" />
@@ -399,11 +478,7 @@ function SmtpEditor({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="role" className="text-xs">Role *</Label>
-                <Select
-                  id="role"
-                  name="role"
-                  defaultValue={initial?.role ?? defaultRole}
-                >
+                <Select id="role" name="role" defaultValue={initial?.role ?? defaultRole}>
                   <option value="primary">Primary</option>
                   <option value="emergency">Emergency</option>
                 </Select>
@@ -443,7 +518,7 @@ function SmtpEditor({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="fromName" className="text-xs">From name</Label>
-                <Input id="fromName" name="fromName" defaultValue={initial?.fromName ?? "Trishulhub"} />
+                <Input id="fromName" name="fromName" defaultValue={initial?.fromName ?? "Your Brand"} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="fromEmail" className="text-xs">From email *</Label>
@@ -451,10 +526,32 @@ function SmtpEditor({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="dailyLimit" className="text-xs">Daily sending limit</Label>
-              <Input id="dailyLimit" name="dailyLimit" type="number" defaultValue={initial?.dailyLimit ?? 500} />
-              <p className="text-xs text-muted-foreground">When this SMTP hits the limit, it auto-fails over to the next.</p>
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">Provider email quotas *</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Enter what your SMTP provider allows. We’ll track usage here so you don’t need to check their dashboard.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="dailyLimit" className="text-xs">Daily limit</Label>
+                  <Input id="dailyLimit" name="dailyLimit" type="number" min={1} defaultValue={initial?.dailyLimit ?? 500} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="monthlyQuota" className="text-xs">Monthly quota *</Label>
+                  <Input id="monthlyQuota" name="monthlyQuota" type="number" min={1} defaultValue={initial?.monthlyQuota ?? 10000} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="totalQuota" className="text-xs">Total quota (optional)</Label>
+                  <Input
+                    id="totalQuota"
+                    name="totalQuota"
+                    type="number"
+                    min={1}
+                    defaultValue={initial?.totalQuota ?? ""}
+                    placeholder="Leave blank if none"
+                  />
+                </div>
+              </div>
             </div>
 
             <details className="rounded-xl border p-4">
@@ -482,9 +579,6 @@ function SmtpEditor({
                     <Input id="imapPassword" name="imapPassword" type="password" placeholder={isEdit ? "••••••" : ""} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Fill this in to let the system monitor this inbox for replies and auto-promote leads into the CRM.
-                </p>
               </div>
             </details>
 

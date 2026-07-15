@@ -5,14 +5,14 @@ import { db, schema } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { SMTP_ROLES } from "@/drizzle/schema";
+import { getPlanLimits, smtpCapForRole } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
 
-/** List all SMTP configs (passwords never exposed). */
-export async function GET() {
-  if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rows = await db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id);
-  const safe = rows.map((r) => ({
+function serialize(r: typeof schema.smtpConfigs.$inferSelect) {
+  const monthlyLeft = Math.max(0, r.monthlyQuota - r.sentThisMonth);
+  const totalLeft = r.totalQuota == null ? null : Math.max(0, r.totalQuota - r.sentTotal);
+  return {
     id: r.id,
     label: r.label,
     role: r.role,
@@ -25,6 +25,12 @@ export async function GET() {
     fromEmail: r.fromEmail,
     dailyLimit: r.dailyLimit,
     sentToday: r.sentToday,
+    monthlyQuota: r.monthlyQuota,
+    sentThisMonth: r.sentThisMonth,
+    monthlyLeft,
+    totalQuota: r.totalQuota,
+    sentTotal: r.sentTotal,
+    totalLeft,
     healthy: r.healthy,
     lastError: r.lastError,
     lastCheckedAt: r.lastCheckedAt,
@@ -33,8 +39,17 @@ export async function GET() {
     imapUser: r.imapUser,
     hasImapPassword: Boolean(r.imapPassEnc),
     createdAt: r.createdAt,
-  }));
-  return NextResponse.json({ configs: safe });
+  };
+}
+
+/** List all SMTP configs (passwords never exposed). */
+export async function GET() {
+  if (!(await getCurrentUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const [rows, limits] = await Promise.all([
+    db.select().from(schema.smtpConfigs).orderBy(schema.smtpConfigs.role, schema.smtpConfigs.id),
+    getPlanLimits(),
+  ]);
+  return NextResponse.json({ configs: rows.map(serialize), plan: limits });
 }
 
 /** Create or update an SMTP config. */
@@ -51,10 +66,12 @@ export async function POST(req: Request) {
     port,
     secure,
     user: smtpUser,
-    password, // plaintext from the form; only set if user typed a new one
+    password,
     fromName,
     fromEmail,
     dailyLimit,
+    monthlyQuota,
+    totalQuota,
     imapHost,
     imapPort,
     imapSecure,
@@ -69,22 +86,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid role." }, { status: 400 });
   }
 
-  // Enforce the 8-SMTP cap (4 primary + 4 emergency).
+  const limits = await getPlanLimits();
+  const cap = smtpCapForRole(limits, role);
+
+  // Enforce plan caps when creating a new SMTP.
   if (!id) {
     const existing = await db
       .select({ id: schema.smtpConfigs.id, role: schema.smtpConfigs.role })
       .from(schema.smtpConfigs)
       .where(eq(schema.smtpConfigs.role, role));
-    if (existing.length >= 4) {
+    if (existing.length >= cap) {
       return NextResponse.json(
-        { error: `You already have 4 ${role} SMTPs. That's the maximum per role.` },
-        { status: 400 }
+        {
+          error:
+            limits.plan === "free"
+              ? `Free plan allows ${cap} ${role} SMTP. Upgrade to Premium for a larger pool.`
+              : `You already have ${cap} ${role} SMTPs. That's the maximum per role.`,
+          upgrade: limits.plan === "free",
+        },
+        { status: 403 }
       );
     }
   }
 
-  // For NEW configs, all fields are required with defaults. For UPDATEs, only
-  // set fields that were actually provided (omit → don't clobber existing value).
   const isUpdate = Boolean(id);
   const portNum = port !== undefined ? Number(port) || 587 : undefined;
   const values: Partial<typeof schema.smtpConfigs.$inferInsert> = {};
@@ -96,15 +120,19 @@ export async function POST(req: Request) {
   if (secure !== undefined) values.secure = secure;
   else if (portNum !== undefined) values.secure = portNum === 465;
   if (smtpUser !== undefined) values.user = smtpUser;
-  if (fromName !== undefined) values.fromName = fromName || "Trishulhub";
+  if (fromName !== undefined) values.fromName = fromName || "Your Brand";
   if (fromEmail !== undefined) values.fromEmail = fromEmail;
-  if (dailyLimit !== undefined) values.dailyLimit = Number(dailyLimit) || 500;
+  if (dailyLimit !== undefined) values.dailyLimit = Math.max(1, Number(dailyLimit) || 500);
+  if (monthlyQuota !== undefined) values.monthlyQuota = Math.max(1, Number(monthlyQuota) || 10000);
+  if (totalQuota !== undefined) {
+    const raw = totalQuota === "" || totalQuota === null ? null : Number(totalQuota);
+    values.totalQuota = raw == null || Number.isNaN(raw) || raw <= 0 ? null : Math.floor(raw);
+  }
   if (imapHost !== undefined) values.imapHost = imapHost || null;
   if (imapPort !== undefined) values.imapPort = imapPort ? Number(imapPort) : 993;
   if (imapSecure !== undefined) values.imapSecure = imapSecure;
   if (imapUser !== undefined) values.imapUser = imapUser || null;
 
-  // Only re-encrypt if a new plaintext password was provided.
   if (password) values.passEnc = await encrypt(password);
   if (imapPassword) values.imapPassEnc = await encrypt(imapPassword);
 
@@ -114,34 +142,42 @@ export async function POST(req: Request) {
     }
     await db.update(schema.smtpConfigs).set(values).where(eq(schema.smtpConfigs.id, id));
     return NextResponse.json({ ok: true, id });
-  } else {
-    // For new configs, fill in required defaults.
-    if (!host) return NextResponse.json({ error: "Host is required." }, { status: 400 });
-    if (!smtpUser) return NextResponse.json({ error: "Username is required." }, { status: 400 });
-    if (!fromEmail) return NextResponse.json({ error: "From email is required." }, { status: 400 });
-    if (!password) return NextResponse.json({ error: "Password is required for a new SMTP." }, { status: 400 });
-    const inserted = await db
-      .insert(schema.smtpConfigs)
-      .values({
-        label: label || "SMTP",
-        role,
-        host,
-        port: portNum ?? 587,
-        secure: secure ?? portNum === 465,
-        user: smtpUser,
-        fromName: fromName || "Trishulhub",
-        fromEmail,
-        dailyLimit: Number(dailyLimit) || 500,
-        passEnc: values.passEnc!,
-        imapHost: imapHost || null,
-        imapPort: imapPort ? Number(imapPort) : 993,
-        imapSecure: imapSecure ?? true,
-        imapUser: imapUser || null,
-        ...(values.imapPassEnc ? { imapPassEnc: values.imapPassEnc } : {}),
-      })
-      .returning({ id: schema.smtpConfigs.id });
-    return NextResponse.json({ ok: true, id: inserted[0].id });
   }
+
+  if (!host) return NextResponse.json({ error: "Host is required." }, { status: 400 });
+  if (!smtpUser) return NextResponse.json({ error: "Username is required." }, { status: 400 });
+  if (!fromEmail) return NextResponse.json({ error: "From email is required." }, { status: 400 });
+  if (!password) return NextResponse.json({ error: "Password is required for a new SMTP." }, { status: 400 });
+  if (monthlyQuota === undefined || monthlyQuota === "" || Number(monthlyQuota) <= 0) {
+    return NextResponse.json({ error: "Monthly email quota is required." }, { status: 400 });
+  }
+
+  const inserted = await db
+    .insert(schema.smtpConfigs)
+    .values({
+      label: label || "SMTP",
+      role,
+      host,
+      port: portNum ?? 587,
+      secure: secure ?? portNum === 465,
+      user: smtpUser,
+      fromName: fromName || "Your Brand",
+      fromEmail,
+      dailyLimit: Math.max(1, Number(dailyLimit) || 500),
+      monthlyQuota: Math.max(1, Number(monthlyQuota) || 10000),
+      totalQuota:
+        totalQuota === "" || totalQuota == null || Number(totalQuota) <= 0
+          ? null
+          : Math.floor(Number(totalQuota)),
+      passEnc: values.passEnc!,
+      imapHost: imapHost || null,
+      imapPort: imapPort ? Number(imapPort) : 993,
+      imapSecure: imapSecure ?? true,
+      imapUser: imapUser || null,
+      ...(values.imapPassEnc ? { imapPassEnc: values.imapPassEnc } : {}),
+    })
+    .returning({ id: schema.smtpConfigs.id });
+  return NextResponse.json({ ok: true, id: inserted[0].id });
 }
 
 /** Delete an SMTP config. */

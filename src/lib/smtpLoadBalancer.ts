@@ -27,25 +27,46 @@ const RR_PRIMARY = "rr_smtp_primary";
 const RR_EMERGENCY = "rr_smtp_emergency";
 const FAILURE_THRESHOLD = 3; // consecutive failures before marking unhealthy
 
-/** Reset an SMTP's daily counter if it's a new day. */
+/** Reset an SMTP's daily / monthly counters when the calendar period rolls. */
 async function maybeResetCounter(row: typeof schema.smtpConfigs.$inferSelect) {
   const today = new Date();
-  const reset = new Date(row.limitResetAt);
+  let next = { ...row };
+
+  const dayReset = new Date(row.limitResetAt);
   const sameDay =
-    today.getFullYear() === reset.getFullYear() &&
-    today.getMonth() === reset.getMonth() &&
-    today.getDate() === reset.getDate();
+    today.getFullYear() === dayReset.getFullYear() &&
+    today.getMonth() === dayReset.getMonth() &&
+    today.getDate() === dayReset.getDate();
   if (!sameDay) {
     await db
       .update(schema.smtpConfigs)
       .set({ sentToday: 0, limitResetAt: today })
       .where(eq(schema.smtpConfigs.id, row.id));
-    return { ...row, sentToday: 0 };
+    next = { ...next, sentToday: 0, limitResetAt: today };
   }
-  return row;
+
+  const monthReset = new Date(row.monthResetAt);
+  const sameMonth =
+    today.getFullYear() === monthReset.getFullYear() && today.getMonth() === monthReset.getMonth();
+  if (!sameMonth) {
+    await db
+      .update(schema.smtpConfigs)
+      .set({ sentThisMonth: 0, monthResetAt: today })
+      .where(eq(schema.smtpConfigs.id, row.id));
+    next = { ...next, sentThisMonth: 0, monthResetAt: today };
+  }
+
+  return next;
 }
 
-/** Return healthy candidates (under their daily limit) for a role, ordered by id. */
+function underQuota(row: typeof schema.smtpConfigs.$inferSelect): boolean {
+  if (row.sentToday >= row.dailyLimit) return false;
+  if (row.sentThisMonth >= row.monthlyQuota) return false;
+  if (row.totalQuota != null && row.sentTotal >= row.totalQuota) return false;
+  return true;
+}
+
+/** Return healthy candidates (under all quotas) for a role, ordered by id. */
 async function healthyCandidates(role: SmtpRole) {
   const rows = await db
     .select()
@@ -53,7 +74,7 @@ async function healthyCandidates(role: SmtpRole) {
     .where(and(eq(schema.smtpConfigs.role, role), eq(schema.smtpConfigs.healthy, true)))
     .orderBy(asc(schema.smtpConfigs.id));
   const reset = await Promise.all(rows.map(maybeResetCounter));
-  return reset.filter((r) => r.sentToday < r.dailyLimit);
+  return reset.filter(underQuota);
 }
 
 /** Pick the next SMTP by round-robin across healthy candidates of the given role. */
@@ -110,7 +131,13 @@ export async function resolveSmtp(row: typeof schema.smtpConfigs.$inferSelect): 
 export async function markSent(smtpId: number): Promise<void> {
   await db
     .update(schema.smtpConfigs)
-    .set({ sentToday: sql`${schema.smtpConfigs.sentToday} + 1`, healthy: true, lastError: null })
+    .set({
+      sentToday: sql`${schema.smtpConfigs.sentToday} + 1`,
+      sentThisMonth: sql`${schema.smtpConfigs.sentThisMonth} + 1`,
+      sentTotal: sql`${schema.smtpConfigs.sentTotal} + 1`,
+      healthy: true,
+      lastError: null,
+    })
     .where(eq(schema.smtpConfigs.id, smtpId));
 }
 
@@ -170,11 +197,11 @@ export async function poolSummary() {
   return {
     primary: {
       total: reset.filter((r) => r.role === "primary").length,
-      healthy: reset.filter((r) => r.role === "primary" && r.healthy && r.sentToday < r.dailyLimit).length,
+      healthy: reset.filter((r) => r.role === "primary" && r.healthy && underQuota(r)).length,
     },
     emergency: {
       total: reset.filter((r) => r.role === "emergency").length,
-      healthy: reset.filter((r) => r.role === "emergency" && r.healthy && r.sentToday < r.dailyLimit).length,
+      healthy: reset.filter((r) => r.role === "emergency" && r.healthy && underQuota(r)).length,
     },
     rows: reset,
   };

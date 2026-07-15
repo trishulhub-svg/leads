@@ -35,11 +35,33 @@ export async function POST(req: Request) {
   const { name, templateId, niche } = await req.json();
   if (!name) return NextResponse.json({ error: "Campaign name is required." }, { status: 400 });
 
+  const tid = templateId ? Number(templateId) : null;
+  if (tid) {
+    const { getPlanLimits, isTemplateAllowed } = await import("@/lib/plan");
+    const limits = await getPlanLimits();
+    if (limits.plan === "free") {
+      const allIds = await db
+        .select({ id: schema.templates.id })
+        .from(schema.templates)
+        .orderBy(schema.templates.id);
+      if (!isTemplateAllowed(
+        limits,
+        tid,
+        allIds.map((r) => r.id)
+      )) {
+        return NextResponse.json(
+          { error: "Free plan allows 1 email template. Upgrade to Premium to use more.", upgrade: true },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
   const inserted = await db
     .insert(schema.campaigns)
     .values({
       name,
-      templateId: templateId || null,
+      templateId: tid,
       niche: niche || null,
       status: "draft",
     })

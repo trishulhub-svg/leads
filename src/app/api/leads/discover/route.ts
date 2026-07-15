@@ -20,6 +20,15 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { getPlanLimits } = await import("@/lib/plan");
+  const limits = await getPlanLimits();
+  if (!limits.leadIntelligence) {
+    return NextResponse.json(
+      { error: "Lead discovery is a Premium feature. Upgrade to unlock.", upgrade: true },
+      { status: 403 }
+    );
+  }
+
   const rateLimit = await checkRateLimit(`lead_discovery:${user.id}`, {
     max: 10,
     windowMs: 60 * 60 * 1000,

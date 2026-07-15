@@ -115,6 +115,13 @@ export const smtpConfigs = sqliteTable(
     dailyLimit: integer("daily_limit").notNull().default(500),
     sentToday: integer("sent_today").notNull().default(0),
     limitResetAt: integer("limit_reset_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+    /** Provider monthly email allowance for this mailbox/SMTP. */
+    monthlyQuota: integer("monthly_quota").notNull().default(10000),
+    sentThisMonth: integer("sent_this_month").notNull().default(0),
+    monthResetAt: integer("month_reset_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+    /** Optional lifetime/total quota from the provider. null = not set. */
+    totalQuota: integer("total_quota"),
+    sentTotal: integer("sent_total").notNull().default(0),
     healthy: integer("healthy", { mode: "boolean" }).notNull().default(true),
     lastError: text("last_error"),
     lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }),
