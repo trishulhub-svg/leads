@@ -274,18 +274,11 @@ function buildOverpassSelectors(
 ): string[] {
   const around = `(around:${radius},${latitude},${longitude})`;
   const contactTags = ["website", "contact:website", "email", "contact:email"];
-  const categoryTags = ["amenity", "shop", "office", "craft", "tourism", "healthcare"];
-  const selectors: string[] = [];
-
-  for (const contactTag of contactTags) {
-    selectors.push(`nwr${around}["name"~"${categoryPattern}",i]["${contactTag}"];`);
-    for (const categoryTag of categoryTags) {
-      selectors.push(
-        `nwr${around}["${categoryTag}"~"${categoryPattern}",i]["${contactTag}"];`
-      );
-    }
-  }
-  return selectors;
+  const categoryKeys = "^(name|amenity|shop|office|craft|tourism|healthcare)$";
+  return contactTags.map(
+    (contactTag) =>
+      `nwr${around}[~"${categoryKeys}"~"${categoryPattern}",i]["${contactTag}"];`
+  );
 }
 
 function uniqueBusinesses(
