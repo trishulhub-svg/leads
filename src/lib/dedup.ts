@@ -9,6 +9,8 @@ export type ImportRow = {
   email: string;
   firstName?: string | null;
   company?: string | null;
+  /** Optional per-row niche from the file; falls back to import-level niche. */
+  niche?: string | null;
 };
 
 export type DedupReport = {
@@ -95,7 +97,7 @@ export async function importLeads(
       emailNorm: norm,
       firstName: row.firstName || null,
       company: row.company || null,
-      niche: niche || null,
+      niche: row.niche || niche || null,
       source,
       status: "raw",
     });

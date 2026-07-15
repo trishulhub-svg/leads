@@ -3,22 +3,21 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { LogoutButton } from "@/components/logout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   LayoutDashboard,
   Users,
   Send,
   KanbanSquare,
   Settings as SettingsIcon,
-  LogOut,
   Mail,
   Menu,
   X,
   Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { logoutAction } from "@/server/auth-actions";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -215,12 +214,7 @@ function SidebarContent({
             <p className="truncate text-[11px] text-sidebar-muted">{user.email}</p>
           </div>
         </div>
-        <form action={logoutAction}>
-          <Button type="submit" variant="ghost" size="sm" className="w-full justify-start text-sidebar-muted hover:bg-white/[0.06] hover:text-white">
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </Button>
-        </form>
+        <LogoutButton className="w-full justify-start text-sidebar-muted hover:bg-white/[0.06] hover:text-white" />
       </div>
     </>
   );

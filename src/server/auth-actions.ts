@@ -6,14 +6,17 @@ import { login, logout, sendForgotOtp, verifyForgotOtp, resetPasswordWithToken, 
 export async function loginAction(_prev: { error?: string } | null, formData: FormData) {
   const email = String(formData.get("email") || "");
   const password = String(formData.get("password") || "");
+  const redirectTo = String(formData.get("redirect") || "/");
   const res = await login(email, password);
   if (!res.ok) return { error: res.error };
-  redirect("/");
+  // Only allow same-origin relative paths.
+  const safe = /^\/(?!\/)/.test(redirectTo) ? redirectTo : "/";
+  redirect(safe);
 }
 
+/** Clears the session cookie. Callers should hard-navigate to /login afterwards. */
 export async function logoutAction() {
   await logout();
-  redirect("/login");
 }
 
 export async function forgotAction(_prev: { error?: string; ok?: boolean } | null, formData: FormData) {

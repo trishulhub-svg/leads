@@ -45,6 +45,21 @@ type ImportReport = {
   total: number;
 };
 
+type ImportSummary = {
+  report: ImportReport;
+  fileName: string;
+  mapping: {
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    company: string | null;
+    niche: string | null;
+  };
+  sample: { email: string; firstName?: string | null; company?: string | null }[];
+  parsedRows: number;
+  format: string;
+};
+
 type DiscoveredBusiness = {
   id: string;
   name: string;
@@ -71,6 +86,7 @@ export function LeadsView({
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [importing, setImporting] = React.useState(false);
   const [importNiche, setImportNiche] = React.useState("");
+  const [importSummary, setImportSummary] = React.useState<ImportSummary | null>(null);
   const searchController = React.useRef<AbortController | null>(null);
   const [location, setLocation] = React.useState("");
   const [category, setCategory] = React.useState("");
@@ -141,6 +157,7 @@ export function LeadsView({
     if (!file) return;
     setImporting(true);
     setResult(null);
+    setImportSummary(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -149,16 +166,24 @@ export function LeadsView({
       const data = await res.json();
       if (data.ok) {
         const r = data.report as ImportReport;
+        setImportSummary({
+          report: r,
+          fileName: data.fileName || file.name,
+          mapping: data.mapping || { email: null, firstName: null, lastName: null, company: null, niche: null },
+          sample: data.sample || [],
+          parsedRows: data.parsedRows ?? r.total,
+          format: data.format || "file",
+        });
         setResult({
           ok: true,
-          msg: `Imported ${r.added} new lead${r.added === 1 ? "" : "s"} from ${file.name}. · ${r.alreadySent} already sent · ${r.alreadyLeads} duplicates · ${r.invalid} invalid.`,
+          msg: `Imported ${r.added} new lead${r.added === 1 ? "" : "s"} from ${file.name}.`,
         });
         await refresh();
       } else {
         setResult({ ok: false, msg: data.error || "Import failed." });
       }
-    } catch (err: any) {
-      setResult({ ok: false, msg: err?.message ?? "Import failed." });
+    } catch (err: unknown) {
+      setResult({ ok: false, msg: err instanceof Error ? err.message : "Import failed." });
     }
     setImporting(false);
     if (fileRef.current) fileRef.current.value = "";
@@ -183,20 +208,20 @@ export function LeadsView({
   return (
     <div className="space-y-4">
       {/* Import — primary acquisition method */}
-      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-card/95 shadow-[0_16px_50px_rgba(79,70,229,0.08)]">
-        <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-br from-primary/[0.12] via-primary/[0.05] to-violet-500/[0.04] p-5 sm:p-6">
+      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-card/95 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+        <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-br from-primary/[0.12] via-primary/[0.05] to-transparent p-5 sm:p-6">
           <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
           <div className="flex items-start gap-3">
-            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-indigo-600 text-primary-foreground shadow-lg shadow-primary/20">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(226_72%_38%)] text-primary-foreground shadow-lg shadow-primary/20">
               <Upload className="h-5 w-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Import your leads</h2>
+                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Smart lead importer</h2>
                 <Badge variant="outline" className="bg-card/60">CSV · Excel · TXT</Badge>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Upload your contact list and we’ll clean, de-duplicate, and add every valid address to your outreach pool.
+                Auto-detects email, name, and company columns — even messy headers — then de-duplicates before adding.
               </p>
             </div>
           </div>
@@ -212,21 +237,21 @@ export function LeadsView({
                 onChange={(e) => setImportNiche(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Applied to every lead in this import. Detected columns: email, first_name, company.
+                Used when the file has no niche/category column. Recognizes Email, Name, Company, and many aliases.
               </p>
             </div>
             <input
               id="lead-file-import"
               ref={fileRef}
               type="file"
-              accept=".csv,.xlsx,.txt"
+              accept=".csv,.xlsx,.xls,.txt"
               onChange={doImport}
               className="hidden"
               aria-label="Import lead file"
             />
             <Button
               size="lg"
-              className="w-full lg:w-auto"
+              className="w-full min-h-11 lg:w-auto"
               onClick={() => fileRef.current?.click()}
               disabled={importing}
               aria-controls="lead-file-import"
@@ -238,8 +263,55 @@ export function LeadsView({
         </div>
       </div>
 
-      {/* Result banner */}
       {result && <Alert variant={result.ok ? "success" : "error"}>{result.msg}</Alert>}
+
+      {importSummary && (
+        <div className="space-y-3 rounded-2xl border bg-card/95 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Import results · {importSummary.fileName}</h3>
+              <p className="text-xs text-muted-foreground">
+                Parsed {importSummary.parsedRows} row{importSummary.parsedRows === 1 ? "" : "s"} as {importSummary.format.toUpperCase()}
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setImportSummary(null)}>
+              Dismiss
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <ImportStat label="Added" value={importSummary.report.added} tone="success" />
+            <ImportStat label="Already leads" value={importSummary.report.alreadyLeads} />
+            <ImportStat label="Already sent" value={importSummary.report.alreadySent} />
+            <ImportStat label="Dupes in file" value={importSummary.report.duplicatesInFile} />
+            <ImportStat label="Invalid" value={importSummary.report.invalid} tone="danger" />
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            <MappingChip label="Email" value={importSummary.mapping.email} />
+            <MappingChip label="Name" value={importSummary.mapping.firstName} />
+            <MappingChip label="Company" value={importSummary.mapping.company} />
+            {importSummary.mapping.niche && <MappingChip label="Niche" value={importSummary.mapping.niche} />}
+          </div>
+
+          {importSummary.sample.length > 0 && (
+            <div className="overflow-hidden rounded-xl border">
+              <div className="border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Sample of cleaned rows
+              </div>
+              <div className="divide-y">
+                {importSummary.sample.map((row) => (
+                  <div key={row.email} className="grid gap-1 px-3 py-2 text-sm sm:grid-cols-[1.2fr_1fr_1fr]">
+                    <span className="truncate font-medium">{row.email}</span>
+                    <span className="truncate text-muted-foreground">{row.firstName || "—"}</span>
+                    <span className="truncate text-muted-foreground">{row.company || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Discover businesses — free: upgrade gate · premium: live discovery */}
       {!plan.leadIntelligence ? (
@@ -503,5 +575,41 @@ export function LeadsView({
         )}
       </div>
     </div>
+  );
+}
+
+function ImportStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "success" | "danger";
+}) {
+  return (
+    <div className="rounded-xl border bg-muted/20 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p
+        className={
+          tone === "success"
+            ? "mt-1 text-lg font-semibold tabular-nums text-success"
+            : tone === "danger"
+              ? "mt-1 text-lg font-semibold tabular-nums text-destructive"
+              : "mt-1 text-lg font-semibold tabular-nums"
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function MappingChip({ label, value }: { label: string; value: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-lg border bg-muted/30 px-2 py-1">
+      <span className="font-semibold text-muted-foreground">{label}:</span>
+      <span className="font-medium">{value || "auto-detected / scanned"}</span>
+    </span>
   );
 }

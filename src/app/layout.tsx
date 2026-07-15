@@ -1,5 +1,5 @@
 // src/app/layout.tsx
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -12,10 +12,23 @@ export const metadata: Metadata = {
   description: "Automated Lead Generation, 8-SMTP Email Marketing, and Minimalist CRM",
 };
 
+/** Lock pinch-zoom on phones so the operator UI stays layout-stable. Desktop/Mac unchanged. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f6fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1020" },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${manrope.variable} ${sora.variable} font-sans antialiased`}>
+      <body className={`${manrope.variable} ${sora.variable} font-sans antialiased overflow-x-hidden`}>
         <Providers>{children}</Providers>
       </body>
     </html>
