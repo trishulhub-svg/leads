@@ -18,8 +18,23 @@ export async function POST(req: Request) {
   const niche = ((formData.get("niche") as string) || "").trim() || undefined;
   if (!file) return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
 
+  // Cap upload size before buffering to avoid OOM / timeout on huge files.
+  const MAX_IMPORT_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (typeof file.size === "number" && file.size > MAX_IMPORT_BYTES) {
+    return NextResponse.json(
+      { error: "File is too large. Upload a list under 10 MB." },
+      { status: 413 }
+    );
+  }
+
   const name = file.name.toLowerCase();
   const buf = Buffer.from(await file.arrayBuffer());
+  if (buf.byteLength > MAX_IMPORT_BYTES) {
+    return NextResponse.json(
+      { error: "File is too large. Upload a list under 10 MB." },
+      { status: 413 }
+    );
+  }
 
   let parsed;
   try {

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { testConnection, markFailure } from "@/lib/smtpLoadBalancer";
+import { assertSafeHost } from "@/lib/safe-fetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,12 @@ export async function POST(req: Request) {
 
   // If testData provided (testing a NEW config before saving), build a one-off transporter.
   if (testData) {
+    // Block internal/private hosts so this can't be used to probe the network.
+    try {
+      await assertSafeHost(String(testData.host || ""));
+    } catch (err: any) {
+      return NextResponse.json({ ok: false, error: err?.message || "Invalid SMTP host." }, { status: 200 });
+    }
     const nodemailer = await import("nodemailer");
     try {
       const t = nodemailer.createTransport({

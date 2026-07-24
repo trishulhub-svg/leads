@@ -17,6 +17,8 @@ export async function GET() {
     headers: {
       "Content-Type": brand.logoMime,
       "Cache-Control": "public, max-age=3600",
+      // Prevent MIME sniffing on this public, client-declared-type asset.
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

@@ -74,7 +74,6 @@ async function verify(token: string): Promise<SessionUser | null> {
   const user = payload as unknown as SessionUser;
   if (!user || typeof user.id !== "number") return null;
 
-  // Fail closed only when we positively know a session is revoked.
   if (user.sessionId) {
     try {
       const session = await db
@@ -83,9 +82,16 @@ async function verify(token: string): Promise<SessionUser | null> {
         .where(eq(schema.sessions.id, user.sessionId))
         .limit(1)
         .then((r) => r[0]);
-      if (session?.revokedAt) return null;
+      // If a row exists, enforce revocation + server-side expiry.
+      // (No row is tolerated: session insert at login is best-effort.)
+      if (session) {
+        if (session.revokedAt) return null;
+        if (session.expiresAt && session.expiresAt.getTime() < Date.now()) return null;
+      }
     } catch (err) {
-      console.error("[auth] session lookup error — failing open:", err);
+      // Fail CLOSED: if we can't confirm the session is still valid, deny.
+      console.error("[auth] session lookup error — failing closed:", err);
+      return null;
     }
   }
   return user;
@@ -128,8 +134,15 @@ async function verifyCredentials(
     return { ok: false, error: "Server error. Please try again." };
   }
 
-  // No email enumeration.
-  if (!user) return { ok: false, error: "Invalid email or password" };
+  // No email enumeration — pay the same bcrypt cost when the user is missing.
+  if (!user) {
+    try {
+      await bcrypt.compare(password, await getDummyHash());
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: "Invalid email or password" };
+  }
 
   let match = false;
   try {
@@ -193,6 +206,23 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 12);
 }
 
+// A fixed dummy hash used to equalize timing when the email doesn't exist, so
+// an attacker can't distinguish "no such user" from "wrong password" by timing.
+let dummyHashPromise: Promise<string> | null = null;
+function getDummyHash(): Promise<string> {
+  if (!dummyHashPromise) dummyHashPromise = bcrypt.hash("timing-equalizer", 12);
+  return dummyHashPromise;
+}
+
+/** HTML-escape a value before embedding it in transactional email markup. */
+function escapeEmailHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Forgot password — OTP via a bound SMTP.
 // ──────────────────────────────────────────────────────────────────────────
@@ -245,7 +275,7 @@ export async function sendForgotOtp(
       html: `
       <div style="max-width:500px;margin:0 auto;font-family:Arial,sans-serif;color:#333">
         <h2 style="color:#0f172a">Password reset</h2>
-        <p>Hello <strong>${user.name}</strong>,</p>
+        <p>Hello <strong>${escapeEmailHtml(user.name)}</strong>,</p>
         <p>Use this 6-digit code to reset your password. It expires in 10 minutes.</p>
         <div style="margin:24px 0;text-align:center">
           <span style="display:inline-block;padding:12px 32px;font-size:28px;font-weight:700;letter-spacing:8px;background:#f3f4f6;border-radius:8px;color:#0f172a">${otp}</span>
@@ -272,7 +302,8 @@ export async function verifyForgotOtp(
   otp: string
 ): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
   const rl = await checkRateLimit(`otp_verify:${email.toLowerCase()}`, { max: 5, windowMs: 15 * 60 * 1000 });
-  if (!rl.allowed && !rl.dbError) return { ok: false, error: "Too many attempts. Try again later." };
+  // Fail CLOSED for OTP verification — a DB blip must not disable brute-force protection.
+  if (!rl.allowed) return { ok: false, error: "Too many attempts. Try again later." };
 
   const key = `forgot_otp_${email.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
   const row = await db.select().from(schema.settings).where(eq(schema.settings.key, key)).limit(1).then((r) => r[0]);
@@ -293,7 +324,16 @@ export async function verifyForgotOtp(
 
   await db.delete(schema.settings).where(eq(schema.settings.key, key));
 
-  const resetToken = await new SignJWT({ email: email.toLowerCase(), purpose: "password_reset" })
+  // Bind the reset token to a single-use jti stored server-side. Consumed on the
+  // first successful reset so a captured token can't be replayed in its window.
+  const jti = crypto.randomUUID();
+  const jtiKey = `pwreset_jti_${jti}`;
+  await db.insert(schema.settings).values({
+    key: jtiKey,
+    value: JSON.stringify({ email: email.toLowerCase(), expiresAt: Date.now() + 15 * 60 * 1000 }),
+  });
+
+  const resetToken = await new SignJWT({ email: email.toLowerCase(), purpose: "password_reset", jti })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("15m")
     .sign(getSecret());
@@ -306,10 +346,33 @@ export async function resetPasswordWithToken(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    if (payload.purpose !== "password_reset" || !payload.email) {
+    if (payload.purpose !== "password_reset" || !payload.email || !payload.jti) {
       return { ok: false, error: "Invalid reset token." };
     }
     const email = payload.email as string;
+
+    // Consume the single-use jti. If it's missing, the token was already used
+    // (or never issued) → reject the replay.
+    const jtiKey = `pwreset_jti_${String(payload.jti)}`;
+    const jtiRow = await db
+      .select({ value: schema.settings.value })
+      .from(schema.settings)
+      .where(eq(schema.settings.key, jtiKey))
+      .limit(1)
+      .then((r) => r[0]);
+    if (!jtiRow) return { ok: false, error: "This reset link was already used. Request a new code." };
+    // Delete first so concurrent replays can't both proceed.
+    await db.delete(schema.settings).where(eq(schema.settings.key, jtiKey));
+    try {
+      const meta = JSON.parse(jtiRow.value) as { email?: string; expiresAt?: number };
+      if (meta.email && meta.email !== email) return { ok: false, error: "Invalid reset token." };
+      if (meta.expiresAt && Date.now() > meta.expiresAt) {
+        return { ok: false, error: "This reset link has expired. Request a new code." };
+      }
+    } catch {
+      return { ok: false, error: "Invalid reset token." };
+    }
+
     const user = await db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -407,8 +470,8 @@ export async function requestEmailChange(
       html: `
       <div style="max-width:500px;margin:0 auto;font-family:Arial,sans-serif;color:#333">
         <h2 style="color:#0f172a">Confirm email change</h2>
-        <p>Hello <strong>${user.name}</strong>,</p>
-        <p>Enter this 6-digit code in Settings to change your login email to <strong>${normalized}</strong>.</p>
+        <p>Hello <strong>${escapeEmailHtml(user.name)}</strong>,</p>
+        <p>Enter this 6-digit code in Settings to change your login email to <strong>${escapeEmailHtml(normalized)}</strong>.</p>
         <div style="margin:24px 0;text-align:center">
           <span style="display:inline-block;padding:12px 32px;font-size:28px;font-weight:700;letter-spacing:8px;background:#f3f4f6;border-radius:8px;color:#0f172a">${otp}</span>
         </div>
@@ -438,7 +501,8 @@ export async function confirmEmailChange(
   if (!/^\d{6}$/.test(code)) return { ok: false, error: "Enter the 6-digit code from your email." };
 
   const rl = await checkRateLimit(`email_change_verify:${userId}`, { max: 5, windowMs: 15 * 60 * 1000 });
-  if (!rl.allowed && !rl.dbError) return { ok: false, error: "Too many attempts. Try again later." };
+  // Fail CLOSED for OTP verification — a DB blip must not disable brute-force protection.
+  if (!rl.allowed) return { ok: false, error: "Too many attempts. Try again later." };
 
   const key = `email_change_${userId}`;
   const row = await db.select().from(schema.settings).where(eq(schema.settings.key, key)).limit(1).then((r) => r[0]);
