@@ -116,4 +116,32 @@ function validateLogo(base64: string, mime: string) {
   if (approxBytes > MAX_LOGO_BYTES) {
     throw new Error("Logo is too large. Please upload an image under 400KB.");
   }
+  // Verify the actual bytes match the declared type (magic-number sniff), so a
+  // mismatched/spoofed content-type can't be stored and served back.
+  let head: Buffer;
+  try {
+    head = Buffer.from(base64.slice(0, 32), "base64");
+  } catch {
+    throw new Error("Logo image is not valid.");
+  }
+  if (!magicMatches(head, mime)) {
+    throw new Error("Logo file contents do not match its type. Upload a real PNG, JPG, WEBP, or GIF.");
+  }
+}
+
+function magicMatches(head: Buffer, mime: string): boolean {
+  const startsWith = (bytes: number[]) => bytes.every((b, i) => head[i] === b);
+  switch (mime) {
+    case "image/png":
+      return startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case "image/jpeg":
+      return startsWith([0xff, 0xd8, 0xff]);
+    case "image/gif":
+      return startsWith([0x47, 0x49, 0x46, 0x38]); // GIF8
+    case "image/webp":
+      // RIFF....WEBP
+      return startsWith([0x52, 0x49, 0x46, 0x46]) && head.slice(8, 12).toString("ascii") === "WEBP";
+    default:
+      return false;
+  }
 }

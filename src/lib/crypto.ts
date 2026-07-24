@@ -1,17 +1,48 @@
 // src/lib/crypto.ts
-// AES-256-GCM encryption for SMTP/IMAP passwords stored in the DB.
-// The key is derived (SHA-256) from AUTH_SECRET so nothing extra needs configuring.
+// AES-256-GCM encryption for SMTP/IMAP passwords + AI keys stored in the DB.
+//
+// Key management:
+//   - Prefer a dedicated ENCRYPTION_KEY (independent from AUTH_SECRET) so that
+//     rotating the session-signing secret never makes stored credentials
+//     undecryptable, and a leaked AUTH_SECRET does not also expose credentials.
+//   - For backward compatibility (existing installs that only set AUTH_SECRET),
+//     decryption transparently falls back to a key derived from AUTH_SECRET.
 import { webcrypto } from "node:crypto";
 
 const subtle = webcrypto.subtle;
 
-async function rawKey(): Promise<CryptoKey> {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error("AUTH_SECRET is required (min 32 chars) to encrypt SMTP credentials.");
-  }
+async function deriveKey(secret: string): Promise<CryptoKey> {
   const hash = await subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+/** The primary key used for NEW encryptions (ENCRYPTION_KEY, else AUTH_SECRET). */
+async function primaryKey(): Promise<CryptoKey> {
+  const dedicated = process.env.ENCRYPTION_KEY;
+  if (dedicated && dedicated.trim().length >= 32) {
+    return deriveKey(dedicated.trim());
+  }
+  const auth = process.env.AUTH_SECRET;
+  if (auth && auth.trim().length >= 32) {
+    return deriveKey(auth.trim());
+  }
+  throw new Error(
+    "ENCRYPTION_KEY (preferred) or AUTH_SECRET must be set (min 32 chars) to encrypt credentials."
+  );
+}
+
+/** Candidate keys for DECRYPTION, in priority order (primary + AUTH_SECRET fallback). */
+async function decryptionKeys(): Promise<CryptoKey[]> {
+  const keys: CryptoKey[] = [];
+  const dedicated = process.env.ENCRYPTION_KEY;
+  const auth = process.env.AUTH_SECRET;
+  if (dedicated && dedicated.trim().length >= 32) keys.push(await deriveKey(dedicated.trim()));
+  // Always try AUTH_SECRET too, so values encrypted before ENCRYPTION_KEY existed still open.
+  if (auth && auth.trim().length >= 32) keys.push(await deriveKey(auth.trim()));
+  if (keys.length === 0) {
+    throw new Error("ENCRYPTION_KEY or AUTH_SECRET must be set (min 32 chars) to decrypt credentials.");
+  }
+  return keys;
 }
 
 const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -23,7 +54,7 @@ const fromHex = (h: string) => {
 
 /** Encrypt a plaintext string → "v1:<iv-hex>:<ciphertext-hex>". */
 export async function encrypt(plain: string): Promise<string> {
-  const key = await rawKey();
+  const key = await primaryKey();
   const iv = webcrypto.getRandomValues(new Uint8Array(12));
   const ct = await subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain));
   return `v1:${toHex(iv)}:${toHex(new Uint8Array(ct))}`;
@@ -37,11 +68,17 @@ export async function decrypt(enc: string): Promise<string> {
     return enc;
   }
   const [, ivHex, ctHex] = enc.split(":");
-  const key = await rawKey();
-  const pt = await subtle.decrypt(
-    { name: "AES-GCM", iv: fromHex(ivHex) },
-    key,
-    fromHex(ctHex)
-  );
-  return new TextDecoder().decode(pt);
+  const iv = fromHex(ivHex);
+  const ct = fromHex(ctHex);
+  const keys = await decryptionKeys();
+  let lastErr: unknown;
+  for (const key of keys) {
+    try {
+      const pt = await subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+      return new TextDecoder().decode(pt);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Failed to decrypt stored credential.");
 }

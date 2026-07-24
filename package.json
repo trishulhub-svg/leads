@@ -32,6 +32,7 @@
     "react-dom": "^19.0.0",
     "read-excel-file": "^9.3.1",
     "tailwind-merge": "^2.6.0",
+    "undici": "^6.27.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

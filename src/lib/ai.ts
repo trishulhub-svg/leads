@@ -1,7 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import { decrypt, encrypt } from "./crypto";
-import { assertSafePublicUrl } from "./safe-fetch";
+import { assertSafePublicUrl, pinnedDispatcher } from "./safe-fetch";
 
 const KEYS = {
   apiKey: "ai_deepseek_api_key",
@@ -170,11 +170,18 @@ async function callDeepSeek(
 ): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
+  // Re-validate + DNS-pin the provider host at call time (defeats rebinding on
+  // the owner-configured base URL, which is only validated when saved).
+  const endpoint = `${config.baseUrl}/chat/completions`;
+  const safe = await assertSafePublicUrl(endpoint);
+  const dispatcher = pinnedDispatcher(safe.addresses);
   try {
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    const response = await fetch(safe.url, {
       method: "POST",
       signal: controller.signal,
       redirect: "error",
+      // @ts-expect-error dispatcher is a valid undici RequestInit option
+      dispatcher,
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
@@ -199,5 +206,6 @@ async function callDeepSeek(
     throw error;
   } finally {
     clearTimeout(timeout);
+    dispatcher.close().catch(() => {});
   }
 }

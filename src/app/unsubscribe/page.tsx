@@ -1,6 +1,8 @@
 // src/app/unsubscribe/page.tsx
-// Public page — verify token, suppress the address, show confirmation.
-import { suppressEmail, verifyUnsubscribeToken } from "@/lib/unsubscribe";
+// Public page — verify token (read-only), then require an explicit button press
+// to suppress the address. GET must never mutate (mail scanners fetch links).
+import { verifyUnsubscribeToken } from "@/lib/unsubscribe";
+import { UnsubscribeConfirm } from "./unsubscribe-confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -52,14 +54,10 @@ export default async function UnsubscribePage({
     );
   }
 
-  await suppressEmail(verified.email);
-
+  // Read-only render: the address is only suppressed after the user clicks Confirm.
   return (
     <Shell>
-      <Status
-        title="You’re unsubscribed"
-        body={`We’ve removed ${verified.email} from future Trishulhub outreach. You won’t receive campaign emails from this workspace again.`}
-      />
+      <UnsubscribeConfirm token={token} email={verified.email} />
     </Shell>
   );
 }
